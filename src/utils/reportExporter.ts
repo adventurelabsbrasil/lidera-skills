@@ -268,12 +268,12 @@ export const exportRankingToPDF = (
   const { includeTable = true, includeChart = false, chartImageData } = options;
   const finalFilename = filename || `ranking_${(companyName || 'Empresa').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
 
-  const pdf = new jsPDF('p', 'mm', 'a4');
-  const pageWidth = 210;
-  const pageHeight = 297;
-  const margin = 15;
-  const rowHeight = 8;
-  const headerHeight = 14;
+  const pdf = new jsPDF('l', 'mm', 'a4'); // Paisagem para melhor distribuição
+  const pageWidth = 297;
+  const pageHeight = 210;
+  const margin = 12;
+  const rowHeight = 6;
+  const headerHeight = 12;
 
   // Cores tema claro com contraste adequado
   const colors = {
@@ -309,7 +309,7 @@ export const exportRankingToPDF = (
     yPos += 14;
 
     const cols = ['Pos', 'Nome', 'Setor', 'Cargo', 'Nível', 'Pont.Acum', 'Aval.'];
-    const colWidths = [8, 45, 30, 30, 28, 22, 14];
+    const colWidths = [12, 80, 45, 45, 35, 28, 20]; // Larguras maiores para nomes (Paisagem)
     const tableEndX = margin + colWidths.reduce((a, b) => a + b, 0);
 
     data.forEach((row, idx) => {
@@ -356,24 +356,31 @@ export const exportRankingToPDF = (
         setTextColor(colors.text);
       }
 
-      const nameTrunc = (row.name || '').length > 35 ? (row.name || '').substring(0, 32) + '...' : row.name || '-';
-      const sectorTrunc = (row.sector || '').length > 18 ? (row.sector || '').substring(0, 15) + '...' : row.sector || '-';
-      const roleTrunc = (row.role || '').length > 18 ? (row.role || '').substring(0, 15) + '...' : row.role || '-';
+      const nameStr = row.name || '-';
+      const sectorStr = row.sector || '-';
+      const roleStr = row.role || '-';
+      const nameLines = pdf.splitTextToSize(nameStr, colWidths[1] - 2);
+      const sectorLines = pdf.splitTextToSize(sectorStr, colWidths[2] - 2);
+      const roleLines = pdf.splitTextToSize(roleStr, colWidths[3] - 2);
+      const maxLines = Math.max(nameLines.length, sectorLines.length, roleLines.length, 1);
 
-      const rowData = [
-        String(idx + 1),
-        nameTrunc,
-        sectorTrunc,
-        roleTrunc,
-        row.level || '-',
-        row.totalScore.toFixed(1),
-        String(row.evaluationCount),
-      ];
-      rowData.forEach((val, i) => {
-        pdf.text(val, colStart + 1, yPos);
-        colStart += colWidths[i];
-      });
-      yPos += rowHeight;
+      for (let ln = 0; ln < maxLines; ln++) {
+        let x = margin;
+        const vals = [
+          ln === 0 ? String(idx + 1) : '',
+          nameLines[ln] ?? '',
+          sectorLines[ln] ?? '',
+          roleLines[ln] ?? '',
+          ln === 0 ? (row.level || '-') : '',
+          ln === 0 ? row.totalScore.toFixed(1) : '',
+          ln === 0 ? String(row.evaluationCount) : '',
+        ];
+        vals.forEach((val, i) => {
+          if (val) pdf.text(val, x + 1, yPos);
+          x += colWidths[i];
+        });
+        yPos += rowHeight;
+      }
 
       if (idx < data.length - 1) {
         pdf.setDrawColor(204, 204, 204);

@@ -53,7 +53,19 @@ export function exportReportToCSV(
 }
 
 /**
- * Exporta dados para Excel (XLS)
+ * Larguras de colunas para Excel (wch = largura em caracteres)
+ * Colunas de nome recebem 30+ caracteres para caber nomes completos
+ */
+function getExcelColumnWidths(columns: string[]): { wch: number }[] {
+  const NOME_COLS = ['name', 'Nome', 'employeeName', 'realName'];
+  return columns.map((col) => {
+    const isNome = NOME_COLS.some((n) => col === n || col.toLowerCase().includes('nome'));
+    return { wch: isNome ? 35 : 18 };
+  });
+}
+
+/**
+ * Exporta dados para Excel (XLS) com colunas largas para nomes
  */
 export function exportReportToXLS(
   data: Record<string, unknown>[],
@@ -64,6 +76,10 @@ export function exportReportToXLS(
   const finalFilename = filename || getFilename(reportType, 'xlsx');
   const flat = data.map(flattenRow);
   const worksheet = XLSX.utils.json_to_sheet(flat);
+  const cols = flat.length > 0 ? Object.keys(flat[0]) : [];
+  if (cols.length > 0) {
+    worksheet['!cols'] = getExcelColumnWidths(cols);
+  }
   const workbook = XLSX.utils.book_new();
   const safeName = sheetName.slice(0, 31);
   XLSX.utils.book_append_sheet(workbook, worksheet, safeName);
@@ -71,8 +87,30 @@ export function exportReportToXLS(
   return finalFilename;
 }
 
+/** Colunas de nome precisam de mais largura para caber nomes completos */
+const NOME_COLUMN_NAMES = ['name', 'Nome', 'employeeName', 'realName'];
+
 /**
- * Exporta dados tabulares para PDF (tema claro)
+ * Distribui larguras de colunas (mais espaço para nomes)
+ */
+function getColumnWidths(columns: string[], totalWidth: number): number[] {
+  const weights = columns.map((col) => {
+    const isNome = NOME_COLUMN_NAMES.some((n) => col === n || col.toLowerCase().includes('nome'));
+    return isNome ? 2.5 : 1;
+  });
+  const sum = weights.reduce((a, b) => a + b, 0);
+  return weights.map((w) => (w / sum) * totalWidth);
+}
+
+/**
+ * Quebra texto em linhas que cabem na largura
+ */
+function wrapText(pdf: jsPDF, text: string, maxWidth: number): string[] {
+  return pdf.splitTextToSize(text || '-', Math.max(maxWidth - 2, 10));
+}
+
+/**
+ * Exporta dados tabulares para PDF (tema claro, Paisagem, quebras de linha)
  */
 export function exportReportToPDF(
   data: Record<string, unknown>[],
@@ -82,24 +120,24 @@ export function exportReportToPDF(
   reportType: ReportType = 'colaboradores'
 ): string {
   const finalFilename = filename || getFilename(reportType, 'pdf');
-  const pdf = new jsPDF('p', 'mm', 'a4');
-  const pageWidth = 210;
-  const pageHeight = 297;
-  const margin = 15;
-  const rowHeight = 8;
+  const pdf = new jsPDF('l', 'mm', 'a4'); // Paisagem
+  const pageWidth = 297;
+  const pageHeight = 210;
+  const margin = 12;
   const headerHeight = 12;
+  const lineHeight = 5;
+  const tableWidth = pageWidth - 2 * margin;
 
   setPdfTextColor(pdf, COLORS.text);
   pdf.setFontSize(16);
   pdf.setFont('helvetica', 'bold');
-  pdf.text(title, pageWidth / 2, 15, { align: 'center' });
+  pdf.text(title, pageWidth / 2, 12, { align: 'center' });
   pdf.setFontSize(10);
   pdf.setFont('helvetica', 'normal');
-  pdf.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, 22, { align: 'center' });
+  pdf.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, 18, { align: 'center' });
 
-  const colCount = columns.length;
-  const colWidth = (pageWidth - 2 * margin) / colCount;
-  const tableEndX = margin + colCount * colWidth;
+  const colWidths = getColumnWidths(columns, tableWidth);
+  const tableEndX = margin + colWidths.reduce((a, b) => a + b, 0);
 
   const drawHeader = (y: number) => {
     pdf.setFillColor(232, 232, 232);
@@ -108,34 +146,49 @@ export function exportReportToPDF(
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(9);
     let x = margin;
-    columns.forEach((col) => {
-      pdf.text(col, x + 1, y + 2);
-      x += colWidth;
+    columns.forEach((col, i) => {
+      const lines = wrapText(pdf, col, colWidths[i]);
+      pdf.text(lines[0], x + 1, y + 2);
+      x += colWidths[i];
     });
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
     setPdfTextColor(pdf, COLORS.text);
   };
 
-  let yPos = 35;
+  let yPos = 28;
   drawHeader(yPos);
   yPos += headerHeight + 4;
 
   data.forEach((row, idx) => {
-    if (yPos > pageHeight - 25) {
-      pdf.addPage();
-      yPos = 20;
+    let rowHeight = lineHeight;
+    const cellLines: string[][] = [];
+    columns.forEach((col, i) => {
+      const val = row[col] != null ? String(row[col]) : '-';
+      const lines = wrapText(pdf, val, colWidths[i]);
+      cellLines.push(lines);
+      rowHeight = Math.max(rowHeight, lines.length * lineHeight);
+    });
+
+    if (yPos + rowHeight > pageHeight - 15) {
+      pdf.addPage('l', 'a4');
+      yPos = 15;
       drawHeader(yPos);
       yPos += headerHeight + 4;
     }
 
-    let x = margin;
-    columns.forEach((col) => {
-      const val = row[col] != null ? String(row[col]) : '-';
-      pdf.text(val.slice(0, 25), x + 1, yPos + 2);
-      x += colWidth;
-    });
-    yPos += rowHeight;
+    const maxLines = Math.max(...cellLines.map((l) => l.length));
+    for (let lineIdx = 0; lineIdx < maxLines; lineIdx++) {
+      let x = margin;
+      columns.forEach((col, i) => {
+        const lines = cellLines[i];
+        const line = lines[lineIdx] ?? '';
+        if (line) pdf.text(line, x + 1, yPos + 2);
+        x += colWidths[i];
+      });
+      yPos += lineHeight;
+    }
+    yPos += 2;
   });
 
   pdf.save(finalFilename);
@@ -164,7 +217,7 @@ export interface GeneralReportData {
 }
 
 /**
- * Exporta Relatório Geral para PDF (resumo + páginas separadas por seção)
+ * Exporta Relatório Geral para PDF (resumo + páginas separadas por seção, Paisagem)
  */
 export function exportGeneralReportToPDF(
   generalData: GeneralReportData,
@@ -172,7 +225,7 @@ export function exportGeneralReportToPDF(
   filename?: string
 ): string {
   const finalFilename = filename || `relatorio_geral_${new Date().toISOString().split('T')[0]}.pdf`;
-  const pdf = new jsPDF('p', 'mm', 'a4');
+  const pdf = new jsPDF('p', 'mm', 'a4'); // Resumo em retrato
   const pageWidth = 210;
   const pageHeight = 297;
   const margin = 15;
@@ -227,56 +280,76 @@ export function exportGeneralReportToPDF(
       { key: 'ranking', title: 'Ranking', cols: ['realName', 'realSector', 'realRole', 'realType', 'score'] },
     ];
 
+    const secPageWidth = 297; // Paisagem para tabelas
+    const secPageHeight = 210;
+    const secMargin = 12;
+    const lineHeight = 5;
+    const secTableWidth = secPageWidth - 2 * secMargin;
+
     sectionConfigs.forEach(({ key, title, cols }) => {
       const arr = sections[key as keyof typeof sections];
       if (!arr || !Array.isArray(arr) || arr.length === 0) return;
 
-      if (yPos > pageHeight - 50) {
-        pdf.addPage();
-        yPos = 20;
-      }
-
-      pdf.addPage();
-      yPos = 20;
-      addTitle(title, yPos);
+      pdf.addPage('l', 'a4'); // Nova página em Paisagem para tabelas
+      yPos = 15;
+      setPdfTextColor(pdf, COLORS.text);
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(title, secMargin, yPos);
       yPos += 10;
 
       const data = arr as Record<string, unknown>[];
-      const colWidth = (pageWidth - 2 * margin) / cols.length;
+      const colWidths = getColumnWidths(cols, secTableWidth);
       const headerHeight = 10;
+      const tableEndX = secMargin + colWidths.reduce((a, b) => a + b, 0);
 
       pdf.setFillColor(232, 232, 232);
-      pdf.rect(margin, yPos - 6, pageWidth - 2 * margin, headerHeight, 'F');
+      pdf.rect(secMargin, yPos - 6, tableEndX - secMargin, headerHeight, 'F');
       setPdfTextColor(pdf, COLORS.headerText);
       pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(8);
-      let x = margin;
-      cols.forEach((col) => {
-        pdf.text(col, x + 1, yPos + 2);
-        x += colWidth;
+      pdf.setFontSize(9);
+      let x = secMargin;
+      cols.forEach((col, i) => {
+        const lines = wrapText(pdf, col, colWidths[i]);
+        pdf.text(lines[0], x + 1, yPos + 2);
+        x += colWidths[i];
       });
       yPos += headerHeight + 4;
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(8);
+      pdf.setFontSize(9);
       setPdfTextColor(pdf, COLORS.text);
 
-      data.slice(0, 25).forEach((row) => {
-        if (yPos > pageHeight - 20) {
-          pdf.addPage();
-          yPos = 20;
-        }
-        x = margin;
-        cols.forEach((col) => {
-          const val = row[col] != null ? String(row[col]).slice(0, 20) : '-';
-          pdf.text(val, x + 1, yPos + 2);
-          x += colWidth;
+      data.slice(0, 30).forEach((row) => {
+        let rowHeight = lineHeight;
+        const cellLines: string[][] = [];
+        cols.forEach((col, i) => {
+          const val = row[col] != null ? String(row[col]) : '-';
+          const lines = wrapText(pdf, val, colWidths[i]);
+          cellLines.push(lines);
+          rowHeight = Math.max(rowHeight, lines.length * lineHeight);
         });
-        yPos += 7;
+
+        if (yPos + rowHeight > secPageHeight - 12) {
+          pdf.addPage('l', 'a4');
+          yPos = 15;
+        }
+
+        const maxLines = Math.max(...cellLines.map((l) => l.length));
+        for (let lineIdx = 0; lineIdx < maxLines; lineIdx++) {
+          x = secMargin;
+          cols.forEach((col, i) => {
+            const lines = cellLines[i];
+            const line = lines[lineIdx] ?? '';
+            if (line) pdf.text(line, x + 1, yPos + 2);
+            x += colWidths[i];
+          });
+          yPos += lineHeight;
+        }
+        yPos += 2;
       });
-      if (data.length > 25) {
-        pdf.text(`... e mais ${data.length - 25} registros`, margin, yPos + 4);
+      if (data.length > 30) {
+        pdf.text(`... e mais ${data.length - 30} registros`, secMargin, yPos + 4);
       }
-      yPos += 15;
     });
   }
 
@@ -332,6 +405,10 @@ export function exportGeneralReportToExcel(
   const workbook = XLSX.utils.book_new();
   sheets.forEach(({ name, data }) => {
     const worksheet = XLSX.utils.json_to_sheet(data);
+    const cols = data.length > 0 ? Object.keys(data[0]) : [];
+    if (cols.length > 0) {
+      worksheet['!cols'] = getExcelColumnWidths(cols);
+    }
     XLSX.utils.book_append_sheet(workbook, worksheet, name.slice(0, 31));
   });
   XLSX.writeFile(workbook, finalFilename);
