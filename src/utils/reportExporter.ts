@@ -248,82 +248,169 @@ export const exportRankingToExcel = (
   return filename;
 };
 
+export interface RankingPDFOptions {
+  includeTable?: boolean;
+  includeChart?: boolean;
+  chartImageData?: string;
+}
+
 /**
- * Exporta tabela de ranking para PDF com layout visual e paginação
+ * Exporta ranking para PDF respeitando seções selecionadas (tabela, gráfico).
+ * Tema claro com contraste adequado para leitura.
  */
 export const exportRankingToPDF = (
   data: RankingExportRow[],
   title: string = 'Ranking de Pontuação',
   companyName: string = 'Empresa',
-  filename: string = `ranking_${companyName}_${new Date().toISOString().split('T')[0]}.pdf`
+  options: RankingPDFOptions = {},
+  filename?: string
 ) => {
+  const { includeTable = true, includeChart = false, chartImageData } = options;
+  const finalFilename = filename || `ranking_${(companyName || 'Empresa').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+
   const pdf = new jsPDF('p', 'mm', 'a4');
   const pageWidth = 210;
+  const pageHeight = 297;
   const margin = 15;
-  const contentWidth = pageWidth - 2 * margin;
-  const rowHeight = 7;
-  const headerHeight = 12;
-  const maxRowsPerPage = Math.floor((297 - 50) / rowHeight);
+  const rowHeight = 8;
+  const headerHeight = 14;
+
+  // Cores tema claro com contraste adequado
+  const colors = {
+    text: '#1a1a1a',
+    textSecondary: '#333333',
+    headerBg: '#e8e8e8',
+    headerText: '#0d0d0d',
+    border: '#999999',
+    rowBorder: '#cccccc',
+  };
+
+  const setTextColor = (hex: string) => {
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    pdf.setTextColor(r, g, b);
+  };
 
   let yPos = 20;
+  let hasContent = false;
 
-  pdf.setFontSize(16);
-  pdf.text(title, pageWidth / 2, yPos, { align: 'center' });
-  yPos += 8;
-  pdf.setFontSize(9);
-  pdf.text(`${companyName} - Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, yPos, { align: 'center' });
-  yPos += 12;
+  // Seção: Tabela de ranking
+  if (includeTable && data.length > 0) {
+    hasContent = true;
+    setTextColor(colors.text);
+    pdf.setFontSize(16);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(title, pageWidth / 2, yPos, { align: 'center' });
+    yPos += 8;
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`${companyName} - Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, yPos, { align: 'center' });
+    yPos += 14;
 
-  const cols = ['Pos', 'Nome', 'Setor', 'Cargo', 'Nível', 'Pont.Acum', 'Aval.'];
-  const colWidths = [8, 45, 30, 30, 28, 20, 15];
-  let colStart = margin;
+    const cols = ['Pos', 'Nome', 'Setor', 'Cargo', 'Nível', 'Pont.Acum', 'Aval.'];
+    const colWidths = [8, 45, 30, 30, 28, 22, 14];
+    const tableEndX = margin + colWidths.reduce((a, b) => a + b, 0);
 
-  pdf.setFontSize(8);
-  pdf.setFont('helvetica', 'bold');
-  cols.forEach((col, i) => {
-    pdf.text(col, colStart, yPos);
-    colStart += colWidths[i];
-  });
-  yPos += headerHeight;
-  pdf.setFont('helvetica', 'normal');
+    data.forEach((row, idx) => {
+      if (yPos > pageHeight - 35) {
+        pdf.addPage();
+        yPos = 20;
+      }
 
-  let pageNum = 1;
-  data.forEach((row, idx) => {
-    if (yPos > 280) {
-      pdf.addPage();
-      pageNum++;
-      yPos = 20;
-      colStart = margin;
-      pdf.setFont('helvetica', 'bold');
-      cols.forEach((col, i) => {
-        pdf.text(col, colStart, yPos);
+      let colStart = margin;
+
+      // Cabeçalho repetido em nova página
+      if (yPos === 20 && idx > 0) {
+        pdf.setFillColor(232, 232, 232); // #e8e8e8
+        pdf.rect(margin, yPos - 6, tableEndX - margin, headerHeight, 'F');
+        setTextColor(colors.headerText);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        cols.forEach((col, i) => {
+          pdf.text(col, colStart + 1, yPos + 2);
+          colStart += colWidths[i];
+        });
+        yPos += headerHeight + 2;
+        colStart = margin;
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        setTextColor(colors.text);
+      }
+
+      // Primeira página: cabeçalho da tabela
+      if (idx === 0) {
+        pdf.setFillColor(232, 232, 232);
+        pdf.rect(margin, yPos - 6, tableEndX - margin, headerHeight, 'F');
+        setTextColor(colors.headerText);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        cols.forEach((col, i) => {
+          pdf.text(col, colStart + 1, yPos + 2);
+          colStart += colWidths[i];
+        });
+        yPos += headerHeight + 2;
+        colStart = margin;
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        setTextColor(colors.text);
+      }
+
+      const nameTrunc = (row.name || '').length > 35 ? (row.name || '').substring(0, 32) + '...' : row.name || '-';
+      const sectorTrunc = (row.sector || '').length > 18 ? (row.sector || '').substring(0, 15) + '...' : row.sector || '-';
+      const roleTrunc = (row.role || '').length > 18 ? (row.role || '').substring(0, 15) + '...' : row.role || '-';
+
+      const rowData = [
+        String(idx + 1),
+        nameTrunc,
+        sectorTrunc,
+        roleTrunc,
+        row.level || '-',
+        row.totalScore.toFixed(1),
+        String(row.evaluationCount),
+      ];
+      rowData.forEach((val, i) => {
+        pdf.text(val, colStart + 1, yPos);
         colStart += colWidths[i];
       });
-      yPos += headerHeight;
-      pdf.setFont('helvetica', 'normal');
-    }
+      yPos += rowHeight;
 
-    const nameTrunc = (row.name || '').length > 35 ? (row.name || '').substring(0, 32) + '...' : row.name || '-';
-    const sectorTrunc = (row.sector || '').length > 18 ? (row.sector || '').substring(0, 15) + '...' : row.sector || '-';
-    const roleTrunc = (row.role || '').length > 18 ? (row.role || '').substring(0, 15) + '...' : row.role || '-';
-
-    colStart = margin;
-    const rowData = [
-      String(idx + 1),
-      nameTrunc,
-      sectorTrunc,
-      roleTrunc,
-      row.level || '-',
-      row.totalScore.toFixed(1),
-      String(row.evaluationCount),
-    ];
-    rowData.forEach((val, i) => {
-      pdf.text(val, colStart, yPos);
-      colStart += colWidths[i];
+      if (idx < data.length - 1) {
+        pdf.setDrawColor(204, 204, 204);
+        pdf.line(margin, yPos - 2, tableEndX, yPos - 2);
+      }
     });
-    yPos += rowHeight;
-  });
+    yPos += 15;
+  }
 
-  pdf.save(filename);
-  return filename;
+  // Seção: Gráfico de evolução (quando checkbox marcado e imagem disponível)
+  if (includeChart && chartImageData) {
+    hasContent = true;
+    if (yPos > 60 || (includeTable && data.length > 0)) {
+      pdf.addPage();
+      yPos = 20;
+    }
+    setTextColor(colors.text);
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Evolução Temporal - Top 10', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 10;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.text(`${companyName} - ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, yPos, { align: 'center' });
+    yPos += 12;
+
+    const imgWidth = pageWidth - 2 * margin;
+    const imgHeight = 160;
+    pdf.addImage(chartImageData, 'PNG', margin, yPos, imgWidth, imgHeight);
+  }
+
+  if (!hasContent) {
+    setTextColor(colors.text);
+    pdf.setFontSize(12);
+    pdf.text('Nenhum dado para exportar.', pageWidth / 2, pageHeight / 2, { align: 'center' });
+  }
+
+  pdf.save(finalFilename);
+  return finalFilename;
 };

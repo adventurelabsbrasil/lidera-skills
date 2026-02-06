@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import html2canvas from 'html2canvas';
 import { Trophy, Star, Award, TrendingUp, Users, Briefcase, Layers, BarChart3, FileText, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { useCompany } from '../../../contexts/CompanyContext';
 import { formatShortName } from '../../../utils/nameFormatter';
@@ -28,6 +29,7 @@ export const RankingView = ({ evaluations = [], employees = [], filters }: Ranki
   const [exportChart, setExportChart] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
 
   // Mapa de funcionários para busca rápida
   const employeeMap = useMemo(() => {
@@ -515,7 +517,29 @@ export const RankingView = ({ evaluations = [], employees = [], filters }: Ranki
                   }));
                   setExportingPDF(true);
                   try {
-                    exportRankingToPDF(rows, 'Ranking de Pontuação', currentCompany?.name || 'Empresa');
+                    let chartImageData: string | undefined;
+                    if (exportChart) {
+                      await new Promise((r) => setTimeout(r, 400));
+                      const chartEl = chartContainerRef.current;
+                      if (chartEl) {
+                        try {
+                          const canvas = await html2canvas(chartEl, {
+                            scale: 2,
+                            useCORS: true,
+                            logging: false,
+                            backgroundColor: '#ffffff',
+                          });
+                          chartImageData = canvas.toDataURL('image/png');
+                        } catch {
+                          toast.warning('Gráfico não capturado. Tente desmarcar Gráfico de evolução.');
+                        }
+                      }
+                    }
+                    exportRankingToPDF(rows, 'Ranking de Pontuação', currentCompany?.name || 'Empresa', {
+                      includeTable: exportTable,
+                      includeChart: exportChart,
+                      chartImageData,
+                    });
                     toast.success('PDF exportado com sucesso!');
                   } catch (e) {
                     toast.error('Erro ao exportar PDF.');
@@ -534,22 +558,63 @@ export const RankingView = ({ evaluations = [], employees = [], filters }: Ranki
         </div>
       )}
 
+      {/* Gráfico oculto para exportação PDF (renderizado quando exportChart está marcado) */}
+      {exportChart && processedRankings.rankings.length > 0 && chartData.length > 0 && (
+        <div
+          ref={chartContainerRef}
+          className="bg-white p-6 border border-gray-200"
+          style={{
+            position: 'absolute',
+            left: -9999,
+            top: 0,
+            width: 800,
+            minHeight: 400,
+            zIndex: -1,
+          }}
+        >
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Evolução Temporal - Top 10</h3>
+          <ResponsiveContainer width={760} height={400}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#666666" />
+              <XAxis dataKey="date" stroke="#333333" tick={{ fill: '#1a1a1a' }} />
+              <YAxis stroke="#333333" tick={{ fill: '#1a1a1a' }} domain={['auto', 'auto']} />
+              <Legend />
+              {processedRankings.rankings.slice(0, 10).map((emp, idx) => {
+                const empKey = `emp_${emp.employeeId || emp.name}`.replace(/\s+/g, '_');
+                return (
+                  <Line
+                    key={emp.employeeId || emp.name}
+                    type="monotone"
+                    dataKey={empKey}
+                    name={emp.name}
+                    stroke={colors[idx % colors.length]}
+                    strokeWidth={2}
+                    dot={false}
+                    connectNulls
+                  />
+                );
+              })}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       {/* Conteúdo */}
       {processedRankings.rankings.length === 0 ? (
         <div className="bg-white dark:bg-[#1E1E1E] p-10 rounded-lg shadow-sm border border-gray-200 dark:border-[#121212] text-center">
           <p className="text-gray-500 dark:text-gray-400">Nenhum dado encontrado para os filtros selecionados.</p>
         </div>
       ) : viewMode === 'chart' ? (
-        <div className="bg-white dark:bg-[#1E1E1E] p-6 rounded-lg shadow-sm border border-gray-200 dark:border-[#121212]">
-          <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">
+        <div className="bg-white dark:bg-[#1E1E1E] p-6 rounded-lg shadow-sm border border-gray-200 dark:border-[#121212]" style={{ minHeight: 400 }}>
+          <h3 className="text-lg font-bold text-gray-900 mb-4">
             Evolução Temporal - Top 10
           </h3>
           <ResponsiveContainer width="100%" height={500}>
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#cccccc" />
               <XAxis 
                 dataKey="date" 
-                stroke="#666"
+                stroke="#333333"
                 tickFormatter={(value) => {
                   // value já está em formato YYYY-MM
                   if (!value) return '';
@@ -561,9 +626,9 @@ export const RankingView = ({ evaluations = [], employees = [], filters }: Ranki
                 }}
               />
               <YAxis 
-                stroke="#666" 
+                stroke="#333333" 
                 domain={['auto', 'auto']}
-                label={{ value: 'Pontuação Acumulada', angle: -90, position: 'insideLeft' }}
+                label={{ value: 'Pontuação Acumulada', angle: -90, position: 'insideLeft', fill: '#1a1a1a' }}
               />
               <Tooltip 
                 content={({ active, payload }) => {
