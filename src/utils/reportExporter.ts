@@ -279,13 +279,13 @@ export const exportRankingToPDF = (
   let colStart = margin;
 
   pdf.setFontSize(8);
-  pdf.setFont(undefined, 'bold');
+  pdf.setFont('helvetica', 'bold');
   cols.forEach((col, i) => {
     pdf.text(col, colStart, yPos);
     colStart += colWidths[i];
   });
   yPos += headerHeight;
-  pdf.setFont(undefined, 'normal');
+  pdf.setFont('helvetica', 'normal');
 
   let pageNum = 1;
   data.forEach((row, idx) => {
@@ -294,13 +294,13 @@ export const exportRankingToPDF = (
       pageNum++;
       yPos = 20;
       colStart = margin;
-      pdf.setFont(undefined, 'bold');
+      pdf.setFont('helvetica', 'bold');
       cols.forEach((col, i) => {
         pdf.text(col, colStart, yPos);
         colStart += colWidths[i];
       });
       yPos += headerHeight;
-      pdf.setFont(undefined, 'normal');
+      pdf.setFont('helvetica', 'normal');
     }
 
     const nameTrunc = (row.name || '').length > 35 ? (row.name || '').substring(0, 32) + '...' : row.name || '-';
