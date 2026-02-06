@@ -200,7 +200,8 @@ export const DataPreviewTable: React.FC<DataPreviewTableProps> = ({
               >
                 {defaultColumns.map((col) => {
                   const val = row[col.key];
-                  const rendered = col.render ? col.render(val, row) : val;
+                  const cfg = col as ColumnConfig;
+                  const rendered = cfg.render ? cfg.render(val, row) : val;
                   return (
                     <td
                       key={col.key}
