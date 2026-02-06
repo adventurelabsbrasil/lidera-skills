@@ -23,7 +23,7 @@ interface ColumnConfig {
   hiddenInTable?: boolean;
 }
 
-export const GenericDatabaseView = ({ collectionName, title, columns }: { collectionName: string, title: string, columns: ColumnConfig[] }) => {
+export const GenericDatabaseView = ({ collectionName, title, columns, modalColumnOrder }: { collectionName: string, title: string, columns: ColumnConfig[], modalColumnOrder?: string[] }) => {
   const { currentCompany, companies } = useCompany();
   const { user } = useAuth();
   const { logAction } = useAuditLogger();
@@ -43,6 +43,8 @@ export const GenericDatabaseView = ({ collectionName, title, columns }: { collec
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentItem, setCurrentItem] = useState<any>({});
   const [linkedOptions, setLinkedOptions] = useState<Record<string, string[]>>({});
+  const [openLinkedSelect, setOpenLinkedSelect] = useState<string | null>(null);
+  const [linkedSelectSearch, setLinkedSelectSearch] = useState<Record<string, string>>({});
 
   // Lógica de coleções universais
   const isUniversalCollection = 
@@ -99,6 +101,18 @@ export const GenericDatabaseView = ({ collectionName, title, columns }: { collec
     };
   }, [pagination.hasMore, pagination.loading, fetchPaginatedData]);
 
+  // Fechar dropdown de linked select ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-linked-select]')) {
+        setOpenLinkedSelect(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Carregar dados vinculados (opções para selects)
   useEffect(() => {
     const loadLinkedData = async () => {
@@ -109,7 +123,8 @@ export const GenericDatabaseView = ({ collectionName, title, columns }: { collec
             const q = collection(db, col.linkedCollection);
             const snap = await getDocs(q);
             const field = col.linkedField || 'name';
-            newLinkedOptions[col.key] = snap.docs.map(d => d.data()[field]).filter(Boolean);
+            const opts = snap.docs.map(d => d.data()[field]).filter(Boolean);
+            newLinkedOptions[col.key] = [...new Set(opts)].sort((a, b) => String(a).localeCompare(String(b)));
           } catch (error) {
             console.error(`Erro ao carregar dados vinculados de ${col.linkedCollection}:`, error);
           }
@@ -344,7 +359,13 @@ export const GenericDatabaseView = ({ collectionName, title, columns }: { collec
       return matchesSearch && matchesFilters;
     });
 
-    if (sortConfig) {
+    if (!sortConfig && collectionName === 'employees') {
+      processed.sort((a, b) => {
+        const nameA = (a.name || '').toLowerCase();
+        const nameB = (b.name || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+    } else if (sortConfig) {
       processed.sort((a, b) => {
         const valA = a[sortConfig.key] ? String(a[sortConfig.key]).toLowerCase() : '';
         const valB = b[sortConfig.key] ? String(b[sortConfig.key]).toLowerCase() : '';
@@ -354,7 +375,7 @@ export const GenericDatabaseView = ({ collectionName, title, columns }: { collec
       });
     }
     return processed;
-  }, [pagination.items, searchTerm, activeFilters, sortConfig]);
+  }, [pagination.items, searchTerm, activeFilters, sortConfig, collectionName]);
 
   // Dados paginados para exibição
   const paginatedData = useMemo(() => {
@@ -372,6 +393,17 @@ export const GenericDatabaseView = ({ collectionName, title, columns }: { collec
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, activeFilters, sortConfig]);
+
+  // Ordenar colunas no modal conforme modalColumnOrder (para funcionários: empresa, id, status, nome, email, nível, setor, cargo, etc.)
+  const modalColumns = useMemo(() => {
+    if (!modalColumnOrder || modalColumnOrder.length === 0) return columns;
+    const orderMap = new Map(modalColumnOrder.map((k, i) => [k, i]));
+    return [...columns].sort((a, b) => {
+      const idxA = orderMap.has(a.key) ? orderMap.get(a.key)! : 9999;
+      const idxB = orderMap.has(b.key) ? orderMap.get(b.key)! : 9999;
+      return idxA - idxB;
+    });
+  }, [columns, modalColumnOrder]);
 
   const renderInput = (col: ColumnConfig) => {
     const value = currentItem[col.key] || '';
@@ -406,6 +438,72 @@ export const GenericDatabaseView = ({ collectionName, title, columns }: { collec
 
     if (col.type === 'select' || col.linkedCollection) {
       const optionsList = col.linkedCollection ? (linkedOptions[col.key] || []) : (col.options || []);
+      const searchTerm = linkedSelectSearch[col.key] || '';
+      const filteredOptions = col.linkedCollection
+        ? optionsList.filter((opt: string) => String(opt).toLowerCase().includes(searchTerm.toLowerCase()))
+        : optionsList;
+
+      // Select pesquisável para linkedCollection (setor, cargo, etc.)
+      if (col.linkedCollection) {
+        const isOpen = openLinkedSelect === col.key;
+        return (
+          <div data-linked-select className="relative">
+            <div className="relative">
+              <input
+                type="text"
+                className="w-full p-2 pl-9 pr-8 rounded border bg-white dark:bg-lidera-dark dark:border-gray-700"
+                placeholder="Buscar ou selecione..."
+                value={isOpen ? searchTerm : (value || '')}
+                onChange={(e) => setLinkedSelectSearch({ ...linkedSelectSearch, [col.key]: e.target.value })}
+                onFocus={() => setOpenLinkedSelect(col.key)}
+                readOnly={!isOpen}
+              />
+              <Search className="absolute left-2.5 top-2.5 text-gray-400" size={16} />
+              <button
+                type="button"
+                onClick={() => setOpenLinkedSelect(isOpen ? null : col.key)}
+                className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
+              >
+                {isOpen ? <X size={14} /> : <span className="text-xs">▼</span>}
+              </button>
+            </div>
+            {isOpen && (
+              <div className="absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white dark:bg-[#1E1E1E] border border-gray-200 dark:border-gray-700 rounded shadow-lg z-50">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentItem({ ...currentItem, [col.key]: '' });
+                    setLinkedSelectSearch({ ...linkedSelectSearch, [col.key]: '' });
+                    setOpenLinkedSelect(null);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500"
+                >
+                  Selecione...
+                </button>
+                {filteredOptions.map((opt: string, idx: number) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setCurrentItem({ ...currentItem, [col.key]: opt });
+                      setLinkedSelectSearch({ ...linkedSelectSearch, [col.key]: '' });
+                      setOpenLinkedSelect(null);
+                    }}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 ${value === opt ? 'bg-blue-50 dark:bg-blue-900/20 font-medium' : ''}`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+                {filteredOptions.length === 0 && (
+                  <div className="px-3 py-2 text-sm text-gray-500">Nenhum resultado</div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // Select nativo para options fixos
       return (
         <select
           className="w-full p-2 rounded border bg-white dark:bg-lidera-dark dark:border-gray-700"
@@ -715,7 +813,7 @@ export const GenericDatabaseView = ({ collectionName, title, columns }: { collec
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {columns.map((col) => (
+                {modalColumns.map((col) => (
                 <div key={col.key} className={col.type === 'email' || col.type === 'multi-select-companies' || col.label.includes('Nome') ? 'md:col-span-2' : ''}>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{col.label}</label>
                     {renderInput(col)}
@@ -786,9 +884,17 @@ export const GenericDatabaseView = ({ collectionName, title, columns }: { collec
                </div>
             </div>
 
-            <button onClick={handleSave} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg mt-6 flex justify-center items-center gap-2 transition-all shadow-md">
-               <Save size={18} /> Salvar Registro
-            </button>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => { setIsModalOpen(false); setCurrentItem({}); setOpenLinkedSelect(null); setLinkedSelectSearch({}); }}
+                className="flex-1 py-3 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-bold rounded-lg flex justify-center items-center gap-2 transition-all"
+              >
+                Cancelar
+              </button>
+              <button onClick={handleSave} className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg flex justify-center items-center gap-2 transition-all shadow-md">
+                <Save size={18} /> Salvar Registro
+              </button>
+            </div>
          </div>
       </Modal>
     </>

@@ -137,6 +137,7 @@ export const EmployeesView = () => (
     <GenericDatabaseView 
       collectionName="employees" 
       title="Gerenciar Funcionários"
+      modalColumnOrder={['employeeCode', 'status', 'name', 'email', 'jobLevel', 'sector', 'role', 'contractType', 'managerName', 'unit', 'costCenter', 'phone', 'area', 'function', 'seniority', 'admissionDate', 'terminationDate', 'discProfile', 'photoUrl']}
       columns={[
         { key: 'employeeCode', label: 'ID Funcionário' },
         { key: 'name', label: 'Nome Completo' },
@@ -151,7 +152,7 @@ export const EmployeesView = () => (
         { key: 'role', label: 'Cargo', linkedCollection: 'roles', linkedField: 'name', type: 'select' },
         { key: 'function', label: 'Função' },
         { key: 'seniority', label: 'Senioridade' },
-        { key: 'jobLevel', label: 'Nível de Cargo' },
+        { key: 'jobLevel', label: 'Nível de Cargo', type: 'select', options: ['Estratégico', 'Tático', 'Operacional', 'Colaborador', 'Líder'] },
         { key: 'admissionDate', label: 'Data de Admissão', type: 'date' },
         { key: 'terminationDate', label: 'Data de Desligamento', type: 'date' },
         { key: 'status', label: 'Status', type: 'select', options: ['Ativo', 'Inativo', 'Férias', 'Afastado'] },

@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-// Card component não aceita children, usando divs estilizadas
-import { Trophy, Star, Award, TrendingUp, Users, Briefcase, Layers, BarChart3 } from 'lucide-react';
+import { Trophy, Star, Award, TrendingUp, Users, Briefcase, Layers, BarChart3, FileText, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { useCompany } from '../../../contexts/CompanyContext';
 import { formatShortName } from '../../../utils/nameFormatter';
+import { exportRankingToExcel, exportRankingToPDF, type RankingExportRow } from '../../../utils/reportExporter';
+import { toast } from '../../../utils/toast';
 
 interface RankingViewProps {
   evaluations: any[];
@@ -22,6 +23,11 @@ export const RankingView = ({ evaluations = [], employees = [], filters }: Ranki
   const { currentCompany } = useCompany();
   const [rankingType, setRankingType] = useState<RankingType>('geral');
   const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
+  const [exportFiltered, setExportFiltered] = useState(true);
+  const [exportTable, setExportTable] = useState(true);
+  const [exportChart, setExportChart] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   // Mapa de funcionários para busca rápida
   const employeeMap = useMemo(() => {
@@ -428,6 +434,105 @@ export const RankingView = ({ evaluations = [], employees = [], filters }: Ranki
           </div>
         </div>
       </div>
+
+      {/* Painel de Exportação */}
+      {processedRankings.rankings.length > 0 && (
+        <div className="bg-white dark:bg-[#1E1E1E] p-4 rounded-lg shadow-sm border border-gray-200 dark:border-[#121212]">
+          <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-4">
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={exportFiltered}
+                  onChange={(e) => setExportFiltered(e.target.checked)}
+                  className="rounded text-blue-600"
+                />
+                Exportar dados filtrados
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={exportTable}
+                  onChange={(e) => setExportTable(e.target.checked)}
+                  className="rounded text-blue-600"
+                />
+                Tabela de ranking
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={exportChart}
+                  onChange={(e) => setExportChart(e.target.checked)}
+                  className="rounded text-blue-600"
+                />
+                Gráfico de evolução
+              </label>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  const data = exportFiltered ? processedRankings.rankings : processedRankings.allRankings;
+                  const rows: RankingExportRow[] = data.map((r: any) => ({
+                    name: r.name,
+                    employeeId: r.employeeId,
+                    sector: r.sector,
+                    role: r.role,
+                    level: r.level,
+                    totalScore: r.totalScore,
+                    averageScore: r.averageScore,
+                    evaluationCount: r.evaluationCount,
+                    highlights: r.highlights || { bySelection: 0, byScore: 0 },
+                  }));
+                  setExportingExcel(true);
+                  try {
+                    exportRankingToExcel(rows, 'Ranking', `ranking_${currentCompany?.name || 'empresa'}_${new Date().toISOString().split('T')[0]}.xlsx`);
+                    toast.success('Excel exportado com sucesso!');
+                  } catch (e) {
+                    toast.error('Erro ao exportar Excel.');
+                  } finally {
+                    setExportingExcel(false);
+                  }
+                }}
+                disabled={exportingExcel || (!exportTable && !exportChart)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {exportingExcel ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
+                Exportar Excel
+              </button>
+              <button
+                onClick={async () => {
+                  const data = exportFiltered ? processedRankings.rankings : processedRankings.allRankings;
+                  const rows: RankingExportRow[] = data.map((r: any) => ({
+                    name: r.name,
+                    employeeId: r.employeeId,
+                    sector: r.sector,
+                    role: r.role,
+                    level: r.level,
+                    totalScore: r.totalScore,
+                    averageScore: r.averageScore,
+                    evaluationCount: r.evaluationCount,
+                    highlights: r.highlights || { bySelection: 0, byScore: 0 },
+                  }));
+                  setExportingPDF(true);
+                  try {
+                    exportRankingToPDF(rows, 'Ranking de Pontuação', currentCompany?.name || 'Empresa');
+                    toast.success('PDF exportado com sucesso!');
+                  } catch (e) {
+                    toast.error('Erro ao exportar PDF.');
+                  } finally {
+                    setExportingPDF(false);
+                  }
+                }}
+                disabled={exportingPDF || (!exportTable && !exportChart)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {exportingPDF ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+                Exportar PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Conteúdo */}
       {processedRankings.rankings.length === 0 ? (

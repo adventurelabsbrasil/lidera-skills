@@ -211,3 +211,119 @@ export const exportDashboardToExcel = (
   exportMultipleSheetsToExcel(sheets, finalFilename);
   return finalFilename;
 };
+
+export interface RankingExportRow {
+  name: string;
+  employeeId: string;
+  sector: string;
+  role: string;
+  level: string;
+  totalScore: number;
+  averageScore: number;
+  evaluationCount: number;
+  highlights: { bySelection: number; byScore: number };
+}
+
+/**
+ * Exporta tabela de ranking para Excel
+ */
+export const exportRankingToExcel = (
+  data: RankingExportRow[],
+  sheetName: string = 'Ranking',
+  filename: string = `ranking_${new Date().toISOString().split('T')[0]}.xlsx`
+) => {
+  const rows = data.map((row, idx) => ({
+    Posição: idx + 1,
+    Nome: row.name,
+    Setor: row.sector,
+    Cargo: row.role,
+    Nível: row.level,
+    'Pontuação Acumulada': row.totalScore.toFixed(2),
+    Média: row.averageScore.toFixed(2),
+    Avaliações: row.evaluationCount,
+    'Destaques (seleção)': row.highlights.bySelection,
+    'Destaques (pontuação)': row.highlights.byScore,
+  }));
+  exportToExcel(rows, sheetName, filename);
+  return filename;
+};
+
+/**
+ * Exporta tabela de ranking para PDF com layout visual e paginação
+ */
+export const exportRankingToPDF = (
+  data: RankingExportRow[],
+  title: string = 'Ranking de Pontuação',
+  companyName: string = 'Empresa',
+  filename: string = `ranking_${companyName}_${new Date().toISOString().split('T')[0]}.pdf`
+) => {
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = 210;
+  const margin = 15;
+  const contentWidth = pageWidth - 2 * margin;
+  const rowHeight = 7;
+  const headerHeight = 12;
+  const maxRowsPerPage = Math.floor((297 - 50) / rowHeight);
+
+  let yPos = 20;
+
+  pdf.setFontSize(16);
+  pdf.text(title, pageWidth / 2, yPos, { align: 'center' });
+  yPos += 8;
+  pdf.setFontSize(9);
+  pdf.text(`${companyName} - Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, yPos, { align: 'center' });
+  yPos += 12;
+
+  const cols = ['Pos', 'Nome', 'Setor', 'Cargo', 'Nível', 'Pont.Acum', 'Aval.'];
+  const colWidths = [8, 45, 30, 30, 28, 20, 15];
+  let colStart = margin;
+
+  pdf.setFontSize(8);
+  pdf.setFont(undefined, 'bold');
+  cols.forEach((col, i) => {
+    pdf.text(col, colStart, yPos);
+    colStart += colWidths[i];
+  });
+  yPos += headerHeight;
+  pdf.setFont(undefined, 'normal');
+
+  let pageNum = 1;
+  data.forEach((row, idx) => {
+    if (yPos > 280) {
+      pdf.addPage();
+      pageNum++;
+      yPos = 20;
+      colStart = margin;
+      pdf.setFont(undefined, 'bold');
+      cols.forEach((col, i) => {
+        pdf.text(col, colStart, yPos);
+        colStart += colWidths[i];
+      });
+      yPos += headerHeight;
+      pdf.setFont(undefined, 'normal');
+    }
+
+    const nameTrunc = (row.name || '').length > 35 ? (row.name || '').substring(0, 32) + '...' : row.name || '-';
+    const sectorTrunc = (row.sector || '').length > 18 ? (row.sector || '').substring(0, 15) + '...' : row.sector || '-';
+    const roleTrunc = (row.role || '').length > 18 ? (row.role || '').substring(0, 15) + '...' : row.role || '-';
+
+    colStart = margin;
+    const rowData = [
+      String(idx + 1),
+      nameTrunc,
+      sectorTrunc,
+      roleTrunc,
+      row.level || '-',
+      row.totalScore.toFixed(1),
+      String(row.evaluationCount),
+    ];
+    rowData.forEach((val, i) => {
+      pdf.text(val, colStart, yPos);
+      colStart += colWidths[i];
+    });
+    yPos += rowHeight;
+  });
+
+  pdf.save(filename);
+  return filename;
+};
