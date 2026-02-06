@@ -42,6 +42,8 @@ O dashboard oferece uma visão completa da saúde organizacional com filtros ava
 #### Abas do Dashboard:
 
 - **Saúde da Empresa**: Visão geral com métricas consolidadas
+  - Checkboxes no sidebar para mostrar/ocultar seções (scorecards, rankings, saúde, distribuições, performance, destaques, funcionários, DISC)
+  - Exportação Excel/PDF no sidebar com tema claro para impressão
   - Score de saúde geral da empresa
   - Distribuição por setores e cargos (gráficos de rosca)
   - Top 10 colaboradores em desempenho com destaque visual
@@ -57,8 +59,9 @@ O dashboard oferece uma visão completa da saúde organizacional com filtros ava
   - Meta de desempenho configurável
 
 - **Ranking de Pontuação**: Visualização de rankings e evolução
-  - Ranking completo de colaboradores
+  - Ranking completo de colaboradores (ordenado por nome por padrão)
   - Evolução temporal do Top 10 (gráfico cumulativo)
+  - Exportação com checkboxes: dados filtrados, tabela de ranking, gráfico de evolução (Excel e PDF com tema claro)
   - Filtros por período e setor
 
 - **Comparativo Individual**: Análise comparativa
@@ -115,6 +118,16 @@ Página dedicada para cada colaborador (`/employee/:companyId/:employeeId`) com:
 - Filtros em painel colapsável (mesmo padrão do dashboard)
 - Nomes de colaboradores são clicáveis e levam ao perfil
 
+### 📊 Relatórios Analíticos e Resumidos
+
+Página dedicada de relatórios (`/reports`) com exportação em CSV, Excel e PDF:
+
+- **Tipos de Relatório**: Geral, Empresas, Setores, Cargos, Níveis, Colaboradores, Critérios de Avaliação, Histórico das Avaliações, Perfil DISC, Ranking por Pontuação, Ranking por Destaque
+- **Filtros Avançados** (estilo Sienge): Período, setores, cargos, status, colaboradores — aplicados antes da exportação para evitar downloads grandes
+- **Prévia de Dados**: Tabela paginada antes de exportar (50 registros por página)
+- **Relatório Geral**: Resumo executivo + seções separadas (PDF: páginas; Excel: abas)
+- **Exportação**: CSV, Excel (XLS) e PDF com tema claro para impressão
+
 ### ✍️ Avaliações
 
 - **Criação de Avaliações**: Formulário completo com validação
@@ -132,11 +145,16 @@ Página dedicada para cada colaborador (`/employee/:companyId/:employeeId`) com:
 
 #### Cadastros Gerais
 - **Critérios de Avaliação**: Definição de critérios para Líderes e Colaboradores
-- **Setores**: Gestão de departamentos/setores da empresa
-- **Cargos**: Cadastro de funções e níveis hierárquicos
+- **Setores**: Gestão de departamentos/setores da empresa (select pesquisável em formulários)
+- **Cargos**: Cadastro de funções e níveis hierárquicos (select pesquisável em formulários)
 
 #### Pessoas
 - **Funcionários**: Visualização e gestão
+  - Ordenação padrão por nome dos colaboradores
+  - Nível hierárquico em dropdown (Estratégico, Tático, Operacional, Colaborador, Líder)
+  - Selects pesquisáveis para setor e cargo em formulários de edição
+  - Ordem dos campos configurável no modal de edição
+  - Botão Cancelar no modal de edição (além de Salvar)
   - Nomes clicáveis que levam ao perfil do colaborador
   - Status "Ativo" ou "Inativo"
   - Funcionários inativos não aparecem no formulário de novas avaliações
@@ -147,7 +165,8 @@ Página dedicada para cada colaborador (`/employee/:companyId/:employeeId`) com:
 
 **Recursos de Edição:**
 - Todos os cadastros são **editáveis** e **excluíveis**
-- Edição inline com modal
+- Edição inline com modal (com botão Cancelar)
+- Selects vinculados (setor, cargo) pesquisáveis e ordenados alfabeticamente
 - Validação de campos obrigatórios
 - Suporte a campos customizados (campos extras)
 
@@ -276,6 +295,12 @@ lidera-skills/
 │   │   │   └── EvaluationsView.tsx
 │   │   ├── layout/        # Componentes de layout
 │   │   │   └── CompanySelector.tsx
+│   │   ├── reports/       # Página de relatórios analíticos
+│   │   │   ├── ReportsView.tsx
+│   │   │   ├── ReportTypeSelector.tsx
+│   │   │   ├── AdvancedReportFilters.tsx
+│   │   │   ├── DataPreviewTable.tsx
+│   │   │   └── ReportExporter.tsx
 │   │   ├── settings/      # Componentes de configuração
 │   │   │   ├── DataImporter.tsx
 │   │   │   ├── GenericDatabaseView.tsx
@@ -291,6 +316,7 @@ lidera-skills/
 │   │   └── CompanyContext.tsx
 │   ├── hooks/             # Custom hooks
 │   │   ├── useDashboardAnalytics.ts
+│   │   ├── useReportData.ts
 │   │   ├── usePagination.ts
 │   │   └── usePerformanceGoals.ts
 │   ├── services/          # Serviços e integrações
@@ -300,6 +326,8 @@ lidera-skills/
 │   │   ├── errorHandler.ts
 │   │   ├── nameFormatter.ts
 │   │   ├── employeeLink.ts
+│   │   ├── reportExporter.ts         # Exportação Excel/PDF de dashboards e rankings
+│   │   ├── reportExporterAnalytics.ts # Exportação CSV/XLS/PDF de relatórios analíticos
 │   │   └── toast.ts
 │   ├── App.tsx            # Componente principal
 │   ├── main.tsx           # Ponto de entrada
@@ -413,6 +441,7 @@ As regras de segurança estão no arquivo `firestore.rules`. Consulte a document
 ### Navegação
 
 - **Nomes de Colaboradores**: Clique em qualquer nome de colaborador em qualquer lugar do sistema para acessar seu perfil completo
+- **Relatórios**: Acesse a aba "Relatórios" no menu principal para exportar relatórios analíticos em CSV, Excel ou PDF com filtros avançados
 - **Logo "Lidera Skills"**: Clique no logo no header para voltar à página inicial
 - **Filtros**: Use o botão de filtros no dashboard para expandir/recolher o painel de filtros
 
@@ -671,6 +700,7 @@ Para suporte, abra uma issue no repositório ou entre em contato com a equipe de
 
 - **[Visão Geral do Sistema](VISAO_GERAL.md)** - Documentação completa das funcionalidades
 - **[Roadmap Técnico](ROADMAP.md)** - Planejamento e melhorias futuras
+- **[Documentação Arquivada](docs/archived/README.md)** - Fases concluídas e solicitações implementadas
 - **[Configuração de Ambiente](README_ENV.md)** - Guia de variáveis de ambiente
 - **[Login Admin](README_ADMIN_LOGIN.md)** - Como criar usuário admin
 - **[Configuração Vercel](VERCEL_ENV_SETUP.md)** - Deploy no Vercel

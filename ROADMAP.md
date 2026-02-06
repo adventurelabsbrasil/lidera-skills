@@ -37,6 +37,9 @@ Este documento detalha a análise técnica atual do projeto, pontos de atenção
 - ✅ Heatmap de pontuação por critério
 - ✅ Evolução temporal corrigida (cumulativa)
 - ✅ Preservação de contexto histórico (setor/cargo/role no momento da avaliação)
+- ✅ Exportação de relatórios (Excel/PDF) com checkboxes de seções para Dashboard (Saúde da Empresa) e Ranking
+- ✅ Selects pesquisáveis em cadastros (setor, cargo)
+- ✅ Controle de visibilidade de seções no Dashboard (checkboxes no sidebar)
 
 ---
 
@@ -66,18 +69,19 @@ Este documento detalha a análise técnica atual do projeto, pontos de atenção
 
 ---
 
-### 2. Exportação de Relatórios 📊
+### 2. ~~Exportação de Relatórios~~ ✅ Implementado
 
 **Objetivo**: Permitir exportação de dashboards e análises em formatos PDF/Excel.
 
-**Funcionalidades:**
-- Exportação de dashboards completos
-- Exportação de análises individuais
+**Funcionalidades Implementadas:**
+- ✅ Exportação de dashboard Saúde da Empresa (Excel/PDF) com checkboxes de seções
+- ✅ Exportação de ranking com checkboxes (dados filtrados, tabela, gráfico)
+- ✅ PDF com tema claro para melhor impressão
+
+**Próximos Passos Possíveis:**
 - Templates de relatórios personalizáveis
 - Agendamento de relatórios automáticos
 - Envio por email
-
-**Prioridade**: Média
 
 ---
 

@@ -1,0 +1,11 @@
+Ajustes Guilherme 202602060949:
+///
+Ajustes:
+1. Não é possível alterar nível (tático, operacional de forma dropdown) no cadastro de novos colaboradores - ajustar
+2. Quando selecionar o setor ou qualquer item do cadastro deve puxar em ordem alfabetica e ter um campo de filtro em texto para facilitar a busca.
+3. no formulario de Editar Registro dos funcionarios - nessa parte deve ficar na ordem de aparecer primero: empresa, id funcionario, status, nome, email, nive, setor, cargo e todo restante de campos devem aparecer depois. Incluir botao Cancelar além do de Salvar. 
+4. Ordenar o nome dos colaboradores por nome como padrão (está setor -> nome)
+6. No dashboard principal quero que nos graficos tabela de rankings tenha a opcao de exportar aquilo que foi filtrado. próximo do botão de exportar deve ter checkbox para selecionar o que será exportado, dados filtrados e secões que devem aparecer no relatório. É necesssário fazer um ajuste para que apareça tudo no pdf, para nao acontecer de quebrar a pagina, deve ter um formato visivel na exportaçao. pois o relatorio em pdf deve ser visual.
+///
+
+

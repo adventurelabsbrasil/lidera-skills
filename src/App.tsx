@@ -10,6 +10,7 @@ import { HelpView } from './components/help/HelpView';
 import DocumentationView from './components/documentation/DocumentationView';
 import { WelcomeView } from './components/welcome/WelcomeView';
 import { EmployeeProfile } from './components/employee/EmployeeProfile';
+import { ReportsView } from './components/reports/ReportsView';
 import { fetchCollection } from './services/firebase';
 import { ThemeToggle } from './components/ui/ThemeToggle';
 import { Toaster } from './components/ui/Toaster';
@@ -41,7 +42,8 @@ import {
   FileCheck,
   HelpCircle,
   Building,
-  FileSpreadsheet, // <--- Importação do ícone
+  FileSpreadsheet,
+  FileBarChart,
   type LucideIcon
 } from 'lucide-react';
 
@@ -280,6 +282,7 @@ function MainApp() {
               <NavButton view="dashboard" icon={LayoutDashboard} label="Painel" />
               <NavButton view="evaluations" icon={FileCheck} label="Avaliações" />
               <NavButton view="history" icon={History} label="Histórico" />
+              <NavButton view="reports" icon={FileBarChart} label="Relatórios" />
               <NavButton view="settings" icon={Settings} label="Configurações" />
               <NavButton view="help" icon={HelpCircle} label="Ajuda" />
             </nav>
@@ -317,6 +320,11 @@ function MainApp() {
             </div>
           } />
           <Route path="/help" element={<HelpView />} />
+          <Route path="/reports" element={
+            <div className="animate-fade-in-up">
+              <ReportsView />
+            </div>
+          } />
           <Route path="/employee/:companyId/:employeeId" element={<EmployeeProfile />} />
           <Route path="/settings" element={<Navigate to="/settings/criteria" replace />} />
           <Route path="/settings/:view" element={<SettingsWrapper />} />

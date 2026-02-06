@@ -53,6 +53,8 @@ O dashboard é o centro de análise do sistema, oferecendo múltiplas visões co
 #### 1.1 Saúde da Empresa
 Visão geral consolidada com métricas principais:
 
+- **Checkboxes no Sidebar**: Controle de visibilidade de seções (scorecards, rankings, saúde, distribuições, performance, destaques, funcionários, DISC)
+- **Exportação Excel/PDF**: Botões no sidebar para exportar o overview com tema claro para impressão
 - **Score de Saúde Geral**: Indicador numérico da saúde organizacional
 - **Distribuição por Setores**: Gráfico de rosca mostrando distribuição de avaliações por setor
 - **Distribuição por Cargos**: Visualização da distribuição por nível hierárquico
@@ -76,8 +78,9 @@ Análise detalhada por competências e evolução temporal:
 #### 1.3 Ranking de Pontuação
 Visualização de rankings e evolução:
 
-- **Ranking Completo**: Lista de todos os colaboradores ordenados por pontuação
+- **Ranking Completo**: Lista de todos os colaboradores (ordenado por nome por padrão)
 - **Evolução Temporal - Top 10**: Gráfico de linhas cumulativas mostrando evolução mensal
+- **Exportação com Checkboxes**: Painel de exportação permite selecionar: dados filtrados, tabela de ranking, gráfico de evolução (Excel e PDF com tema claro)
 - **Filtros**: Por período e setor
 
 #### 1.4 Comparativo Individual
@@ -241,11 +244,48 @@ Visualização hierárquica e detalhada do histórico de avaliações.
 
 ---
 
-### 5. ⚙️ Configurações
+### 5. 📊 Relatórios Analíticos e Resumidos
+
+Página dedicada de relatórios (`/reports`) com exportação em CSV, Excel e PDF.
+
+#### 5.1 Tipos de Relatório
+
+- **Geral**: Resumo executivo + todas as seções (Empresas, Setores, Cargos, Colaboradores, Critérios, Histórico, DISC, Ranking)
+- **Empresas**: Lista de empresas cadastradas
+- **Setores**: Lista de setores
+- **Cargos**: Lista de cargos
+- **Níveis**: Distribuição por nível hierárquico (jobLevel)
+- **Colaboradores**: Lista de funcionários
+- **Critérios de Avaliação**: Lista de critérios (filtro por tipo Líder/Colaborador)
+- **Histórico das Avaliações**: Avaliações realizadas
+- **Perfil DISC**: Colaboradores com perfil DISC cadastrado
+- **Ranking por Pontuação**: Ranking ordenado por média
+- **Ranking por Destaque**: Ranking ordenado por quantidade de destaques
+
+#### 5.2 Filtros Avançados (estilo Sienge)
+
+- Período (presets: Todo o período, Este mês, Mês passado, Este trimestre, Este ano)
+- Setores (multi-select)
+- Cargos (multi-select)
+- Status (Ativo, Inativo, Férias, Afastado)
+- Colaboradores (busca e multi-select para Histórico)
+- Tipo de critério (para Critérios)
+- Filtros aplicados **antes** da exportação para evitar downloads grandes
+
+#### 5.3 Exportação
+
+- **CSV**: Dados tabulares (exceto Relatório Geral)
+- **Excel (XLS)**: Planilha única ou múltiplas abas (Relatório Geral)
+- **PDF**: Tabela com tema claro para impressão; Relatório Geral com resumo + páginas separadas por seção
+- **Prévia**: Tabela paginada (50 registros por página) antes de exportar
+
+---
+
+### 6. ⚙️ Configurações
 
 Módulo completo de cadastros e configurações do sistema.
 
-#### 5.1 Critérios de Avaliação
+#### 6.1 Critérios de Avaliação
 
 - **Cadastro Universal**: Critérios podem ser compartilhados entre empresas
 - **Campos**:
@@ -257,23 +297,27 @@ Módulo completo de cadastros e configurações do sistema.
 - **Importação CSV**: Template disponível para importação em massa
 - **Paginação**: Scroll infinito para grandes volumes
 
-#### 5.2 Setores
+#### 6.2 Setores
 
 - **Cadastro**: Nome do setor e gerente responsável
+- **Select Pesquisável**: Em formulários (ex: funcionários), o campo setor usa combobox pesquisável com ordenação alfabética
 - **Importação CSV**: Suporte a importação em massa
 - **Vínculo com Empresa**: Setores são específicos por empresa
 
-#### 5.3 Cargos
+#### 6.3 Cargos
 
 - **Cadastro**: Nome do cargo e nível hierárquico
+- **Select Pesquisável**: Em formulários (ex: funcionários), o campo cargo usa combobox pesquisável com ordenação alfabética
 - **Níveis Suportados**: Estratégico, Tático, Operacional
 - **Importação CSV**: Template disponível
 - **Vínculo com Empresa**: Cargos são específicos por empresa
 
-#### 5.4 Funcionários
+#### 6.4 Funcionários
 
 **Visualização e Gestão:**
-- Tabela com todos os funcionários
+- Tabela com todos os funcionários (ordenada por nome por padrão)
+- **Nível Hierárquico**: Dropdown com opções: Estratégico, Tático, Operacional, Colaborador, Líder
+- **Modal de Edição**: Ordem configurável dos campos, botão Cancelar além de Salvar, selects pesquisáveis para setor e cargo
 - **Nomes Clicáveis**: Nomes são links para o perfil do colaborador
 - Visualização de foto (ou iniciais)
 - Filtros e busca
@@ -290,17 +334,17 @@ Módulo completo de cadastros e configurações do sistema.
 - Perfil DISC
 - Foto
 
-#### 5.5 Usuários
+#### 6.5 Usuários
 
 - **Gestão de Usuários**: Cadastro e edição de usuários do sistema
 - **Permissões**: Vinculação a empresas e definição de roles
 
-#### 5.6 Empresas (Apenas Master)
+#### 6.6 Empresas (Apenas Master)
 
 - **Cadastro de Empresas Clientes**: Criação e gestão de empresas
 - **Isolamento de Dados**: Cada empresa tem seus próprios dados
 
-#### 5.7 Importar Histórico
+#### 6.7 Importar Histórico
 
 - **Importação de Dados Legados**: Interface dedicada para importação de histórico
 - **Suporte a Múltiplos Formatos**: CSV com diferentes estruturas
