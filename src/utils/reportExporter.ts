@@ -414,3 +414,231 @@ export const exportRankingToPDF = (
   pdf.save(finalFilename);
   return finalFilename;
 };
+
+export interface OverviewSectionOptions {
+  scorecards?: boolean;
+  rankings?: boolean;
+  health?: boolean;
+  distributions?: boolean;
+  performance?: boolean;
+  highlights?: boolean;
+  employees?: boolean;
+  disc?: boolean;
+}
+
+/**
+ * Exporta Overview (Saúde da Empresa) para Excel respeitando seções selecionadas.
+ * Tema claro, sem quebrar conteúdo.
+ */
+export const exportOverviewToExcel = (
+  generalMetrics: any,
+  competenceMetrics: any,
+  companyName: string = 'Empresa',
+  sections: OverviewSectionOptions = {}
+) => {
+  const sheets: Array<{ name: string; data: any[] }> = [];
+  const safe = (v: any) => v ?? '-';
+
+  if (sections.scorecards !== false) {
+    sheets.push({
+      name: 'Resumo Geral',
+      data: [
+        { Métrica: 'Score de Saúde', Valor: generalMetrics.healthScore?.toFixed(2) || '0.00' },
+        { Métrica: 'Total de Avaliações', Valor: generalMetrics.totalEvaluations || 0 },
+        { Métrica: 'Setores Ativos', Valor: generalMetrics.activeSectorsCount || 0 },
+        { Métrica: 'Cargos Ativos', Valor: generalMetrics.activeRolesCount || 0 },
+        { Métrica: 'Colaboradores Ativos', Valor: generalMetrics.activeEmployeesCount || 0 },
+      ],
+    });
+  }
+
+  if ((sections.performance !== false || sections.rankings !== false) && generalMetrics.performanceList?.length > 0) {
+    sheets.push({
+      name: 'Ranking Colaboradores',
+      data: generalMetrics.performanceList.map((item: any, idx: number) => ({
+        Ranking: idx + 1,
+        Nome: safe(item.realName || item.employeeName),
+        Setor: safe(item.realSector || item.sector),
+        Cargo: safe(item.realRole || item.role),
+        Nível: safe(item.realType || item.type),
+        Score: item.score?.toFixed(2) || '0.00',
+        'Func. Mês': item.funcionarioMes || 'Não',
+      })),
+    });
+  }
+
+  if (sections.distributions !== false && generalMetrics.sectorDistribution?.length > 0) {
+    sheets.push({
+      name: 'Distribuição Setores',
+      data: generalMetrics.sectorDistribution.map((item: any) => ({
+        Setor: safe(item.name),
+        Quantidade: item.value,
+      })),
+    });
+  }
+
+  if (sections.distributions !== false && generalMetrics.roleDistribution?.length > 0) {
+    sheets.push({
+      name: 'Distribuição Cargos',
+      data: generalMetrics.roleDistribution.map((item: any) => ({
+        Cargo: safe(item.name),
+        Quantidade: item.value,
+      })),
+    });
+  }
+
+  if (competenceMetrics?.matrixData?.length > 0) {
+    sheets.push({
+      name: 'Matriz Competências',
+      data: competenceMetrics.matrixData.map((row: any) => ({
+        Competência: safe(row.criteria),
+        Nível: safe(row.type),
+        'Média Geral': row.average?.toFixed(2) || '0.00',
+      })),
+    });
+  }
+
+  const filename = `overview_${(companyName || 'empresa').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  if (sheets.length === 0) {
+    exportToExcel([{ Mensagem: 'Nenhum dado selecionado para exportar.' }], 'Vazio', filename);
+  } else {
+    exportMultipleSheetsToExcel(sheets, filename);
+  }
+  return filename;
+};
+
+/**
+ * Exporta Overview (Saúde da Empresa) para PDF com tema claro e contraste.
+ * Respeita seções selecionadas. Usa paginação para evitar conteúdo quebrado.
+ */
+export const exportOverviewToPDF = (
+  generalMetrics: any,
+  companyName: string = 'Empresa',
+  sections: OverviewSectionOptions = {}
+) => {
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = 210;
+  const pageHeight = 297;
+  const margin = 15;
+  const colors = { text: '#1a1a1a', header: '#0d0d0d', headerBg: '#e8e8e8', border: '#cccccc' };
+
+  const setColor = (hex: string) => {
+    pdf.setTextColor(
+      parseInt(hex.slice(1, 3), 16) / 255,
+      parseInt(hex.slice(3, 5), 16) / 255,
+      parseInt(hex.slice(5, 7), 16) / 255
+    );
+  };
+
+  let yPos = 25;
+  const maxY = pageHeight - 25;
+
+  const addPageIfNeeded = (needSpace: number) => {
+    if (yPos + needSpace > maxY) {
+      pdf.addPage();
+      yPos = 25;
+    }
+  };
+
+  setColor(colors.text);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(18);
+  pdf.text('Saúde da Empresa', pageWidth / 2, 20, { align: 'center' });
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(10);
+  pdf.text(`${companyName} - ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, 28, { align: 'center' });
+  yPos = 38;
+
+  if (sections.scorecards !== false) {
+    addPageIfNeeded(40);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(12);
+    setColor(colors.header);
+    pdf.text('Resumo Geral', margin, yPos);
+    yPos += 8;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    setColor(colors.text);
+    const rows = [
+      ['Score de Saúde', generalMetrics.healthScore?.toFixed(2) || '0.00'],
+      ['Total de Avaliações', String(generalMetrics.totalEvaluations || 0)],
+      ['Setores Ativos', String(generalMetrics.activeSectorsCount || 0)],
+      ['Cargos Ativos', String(generalMetrics.activeRolesCount || 0)],
+      ['Colaboradores Ativos', String(generalMetrics.activeEmployeesCount || 0)],
+    ];
+    rows.forEach(([k, v]) => {
+      pdf.text(`${k}: ${v}`, margin, yPos);
+      yPos += 7;
+    });
+    yPos += 8;
+  }
+
+  if ((sections.performance !== false || sections.rankings !== false) && generalMetrics.performanceList?.length > 0) {
+    addPageIfNeeded(50);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(12);
+    setColor(colors.header);
+    pdf.text('Ranking de Colaboradores', margin, yPos);
+    yPos += 10;
+
+    const perfList = generalMetrics.performanceList;
+    const colWidths = [10, 55, 35, 35, 28, 18];
+    const headers = ['#', 'Nome', 'Setor', 'Cargo', 'Nível', 'Score'];
+    pdf.setFillColor(232, 232, 232);
+    pdf.rect(margin, yPos - 5, pageWidth - 2 * margin, 8, 'F');
+    pdf.setFontSize(9);
+    setColor(colors.header);
+    pdf.setFont('helvetica', 'bold');
+    let colStart = margin;
+    headers.forEach((h, i) => {
+      pdf.text(h, colStart + 1, yPos + 1);
+      colStart += colWidths[i];
+    });
+    yPos += 10;
+    pdf.setFont('helvetica', 'normal');
+    setColor(colors.text);
+
+    const rowHeight = 6;
+    for (let i = 0; i < perfList.length; i++) {
+      addPageIfNeeded(rowHeight + 5);
+      const item = perfList[i];
+      const row = [
+        String(i + 1),
+        (item.realName || item.employeeName || '-').toString().slice(0, 25),
+        (item.realSector || item.sector || '-').toString().slice(0, 18),
+        (item.realRole || item.role || '-').toString().slice(0, 18),
+        (item.realType || item.type || '-').toString().slice(0, 12),
+        (item.score?.toFixed(1) || '-'),
+      ];
+      colStart = margin;
+      row.forEach((val, j) => {
+        pdf.text(val, colStart + 1, yPos);
+        colStart += colWidths[j];
+      });
+      yPos += rowHeight;
+    }
+    yPos += 12;
+  }
+
+  if (sections.distributions !== false && generalMetrics.sectorDistribution?.length > 0) {
+    addPageIfNeeded(40);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(12);
+    setColor(colors.header);
+    pdf.text('Distribuição por Setor', margin, yPos);
+    yPos += 10;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    setColor(colors.text);
+    generalMetrics.sectorDistribution.forEach((item: any) => {
+      addPageIfNeeded(6);
+      pdf.text(`• ${item.name || '-'}: ${item.value || 0}`, margin, yPos);
+      yPos += 6;
+    });
+    yPos += 8;
+  }
+
+  const filename = `overview_${(companyName || 'empresa').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+  pdf.save(filename);
+  return filename;
+};

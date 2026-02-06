@@ -52,7 +52,7 @@ const getHeatmapColor = (score: number): { bg: string; text: string } => {
   return color + Math.round(opacity * 255).toString(16).padStart(2, '0');
 };
 
-export const CompanyOverview = ({ data, competenceData, employees = [] }: { data: any; competenceData?: any; employees?: any[] }) => {
+export const CompanyOverview = ({ data, competenceData, employees = [], visibleSections }: { data: any; competenceData?: any; employees?: any[]; visibleSections?: Record<string, boolean> }) => {
   const { currentCompany } = useCompany();
   const [isDarkMode, setIsDarkMode] = useState(false);
   
@@ -270,10 +270,13 @@ export const CompanyOverview = ({ data, competenceData, employees = [] }: { data
   };
   
 
+  const show = (key: string) => visibleSections?.[key] !== false;
+
   return (
     <div className="space-y-6 animate-fadeIn">
       
       {/* 1. Scorecards Superiores */}
+      {show('scorecards') && (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card title="Colaboradores" value={activeEmployeesCount} icon={Users} className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20" />
         <Card title="Setores" value={activeSectorsCount} icon={Briefcase} className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/20 dark:to-gray-700/20" />
@@ -288,8 +291,10 @@ export const CompanyOverview = ({ data, competenceData, employees = [] }: { data
         <Card title="Férias" value={0} icon={CheckCircle} subtitle="Mock Data" className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20" /> 
         <Card title="Afastados" value={0} icon={AlertCircle} subtitle="Mock Data" className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20" />
       </div>
+      )}
 
       {/* 1.1 e 1.2. Rankings lado a lado */}
+      {show('rankings') && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Ranking de Setores */}
         <div className="bg-white dark:bg-navy-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-navy-700">
@@ -507,9 +512,10 @@ export const CompanyOverview = ({ data, competenceData, employees = [] }: { data
           </div>
         )}
       </div>
+      )}
 
       {/* 1.3. Scorecards por Critério de Avaliação (Donuts) */}
-      {metricsData && metricsData.length > 0 && (
+      {show('scorecards') && metricsData && metricsData.length > 0 && (
         <div className="bg-white dark:bg-navy-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-navy-700">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -580,9 +586,10 @@ export const CompanyOverview = ({ data, competenceData, employees = [] }: { data
         </div>
       )}
 
+      {(show('health') || show('distributions')) && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
         {/* 2. Medidor de Saúde */}
+        {show('health') && (
         <div className="bg-gradient-to-br from-white to-gray-50 dark:from-navy-800 dark:to-navy-900 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-navy-700 flex flex-col items-center justify-center relative overflow-hidden">
           <div className="absolute top-6 left-6 flex items-center gap-2">
             <h3 className="text-lg font-bold text-gray-700 dark:text-gray-200">Saúde da Empresa</h3>
@@ -623,8 +630,10 @@ export const CompanyOverview = ({ data, competenceData, employees = [] }: { data
           </div>
           <p className="text-sm text-gray-500 text-center mt-[-40px]">Baseado na média geral das avaliações do período.</p>
         </div>
+        )}
 
         {/* 3. Distribuição de Setores (Rosca) */}
+        {show('distributions') && (
         <div className="bg-white dark:bg-navy-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-navy-700">
            <div className="flex items-center gap-2 mb-4">
              <h3 className="text-lg font-bold text-gray-700 dark:text-gray-200">Setores Ativos</h3>
@@ -655,8 +664,10 @@ export const CompanyOverview = ({ data, competenceData, employees = [] }: { data
              </ResponsiveContainer>
            </div>
         </div>
+        )}
 
         {/* 4. Distribuição de Cargos (Rosca) */}
+        {show('distributions') && (
         <div className="bg-white dark:bg-navy-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-navy-700">
            <div className="flex items-center gap-2 mb-4">
              <h3 className="text-lg font-bold text-gray-700 dark:text-gray-200">Cargos Ativos</h3>
@@ -690,11 +701,15 @@ export const CompanyOverview = ({ data, competenceData, employees = [] }: { data
              </ResponsiveContainer>
            </div>
         </div>
+        )}
       </div>
+      )}
 
       {/* 5. Tabela Resumo e Destaque */}
+      {(show('performance') || show('highlights')) && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
          {/* Tabela Resumo com Mapa de Calor */}
+         {show('performance') && (
          <div className="lg:col-span-2 bg-white dark:bg-navy-800 rounded-xl shadow-sm border border-gray-200 dark:border-navy-700 overflow-hidden">
             <div className="p-4 border-b border-gray-100 dark:border-navy-700 flex justify-between items-center">
                <h3 className="font-bold text-gray-800 dark:text-white">
@@ -917,8 +932,10 @@ export const CompanyOverview = ({ data, competenceData, employees = [] }: { data
                </div>
             </div>
          </div>
+         )}
 
          {/* Cards de Destaques */}
+         {show('highlights') && (
          <div className="space-y-4">
             {/* Destaque por Pontuação (Azul) */}
             <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl shadow-lg p-6 text-white relative overflow-hidden">
@@ -987,9 +1004,12 @@ export const CompanyOverview = ({ data, competenceData, employees = [] }: { data
                </div>
             </div>
          </div>
+         )}
       </div>
-      
+      )}
+
       {/* Destaques de Funcionários (Mais Novos e Mais Antigos) */}
+      {show('employees') && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         {/* Funcionários Mais Novos */}
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl shadow-lg p-6 border border-green-200 dark:border-green-800">
@@ -1070,9 +1090,10 @@ export const CompanyOverview = ({ data, competenceData, employees = [] }: { data
           </div>
         </div>
       </div>
-      
+      )}
+
       {/* Dashboard de Perfil Comportamental (DISC) */}
-      {(discPerformanceBySector && discPerformanceBySector.length > 0) || (discPerformanceByRole && discPerformanceByRole.length > 0) ? (
+      {show('disc') && ((discPerformanceBySector && discPerformanceBySector.length > 0) || (discPerformanceByRole && discPerformanceByRole.length > 0) ? (
         <div className="space-y-6 mt-6">
           <div className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 p-4 rounded-xl border border-purple-200 dark:border-purple-800">
             <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2 flex items-center gap-2">
@@ -1168,7 +1189,7 @@ export const CompanyOverview = ({ data, competenceData, employees = [] }: { data
             )}
           </div>
         </div>
-      ) : null}
+      ) : null)}
     </div>
   );
 };

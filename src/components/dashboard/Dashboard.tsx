@@ -5,6 +5,9 @@ import { useDashboardAnalytics } from '../../hooks/useDashboardAnalytics';
 import { fetchCollection } from '../../services/firebase';
 import { useCompany } from '../../contexts/CompanyContext';
 import { ReportExporter } from '../reports/ReportExporter';
+import { exportOverviewToExcel, exportOverviewToPDF } from '../../utils/reportExporter';
+import { FileText, FileSpreadsheet, Loader2 } from 'lucide-react';
+import { toast } from '../../utils/toast';
 import { usePerformanceGoals } from '../../hooks/usePerformanceGoals';
 
 // Import Tabs
@@ -35,6 +38,20 @@ export const Dashboard = ({ evaluations = [], employees = [], initialTab }: { ev
   const [sectorSearchTerm, setSectorSearchTerm] = useState('');
   const [statusSearchTerm, setStatusSearchTerm] = useState('');
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+  const [exportingOverviewPDF, setExportingOverviewPDF] = useState(false);
+  const [exportingOverviewExcel, setExportingOverviewExcel] = useState(false);
+
+  // Seções visíveis no Dashboard (Saúde da Empresa)
+  const [overviewSections, setOverviewSections] = useState({
+    scorecards: true,
+    rankings: true,
+    health: true,
+    distributions: true,
+    performance: true,
+    highlights: true,
+    employees: true,
+    disc: true,
+  });
   
   // Chave para localStorage
   const FILTERS_STORAGE_KEY = 'lidera-skills-dashboard-filters';
@@ -76,6 +93,7 @@ export const Dashboard = ({ evaluations = [], employees = [], initialTab }: { ev
         setDateStart(filters.dateStart || '');
         setDateEnd(filters.dateEnd || '');
         setActiveFilterLabel(filters.activeFilterLabel || 'Todo o período');
+        if (filters.overviewSections) setOverviewSections(filters.overviewSections);
       }
     } catch (error) {
       console.error('Erro ao carregar filtros salvos:', error);
@@ -91,13 +109,14 @@ export const Dashboard = ({ evaluations = [], employees = [], initialTab }: { ev
         selectedStatuses,
         dateStart,
         dateEnd,
-        activeFilterLabel
+        activeFilterLabel,
+        overviewSections
       };
       localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filtersToSave));
     } catch (error) {
       console.error('Erro ao salvar filtros:', error);
     }
-  }, [selectedSectors, selectedEmployees, selectedStatuses, dateStart, dateEnd, activeFilterLabel]);
+  }, [selectedSectors, selectedEmployees, selectedStatuses, dateStart, dateEnd, activeFilterLabel, overviewSections]);
 
   // Hook de Metas
   const { goalValue } = usePerformanceGoals();
@@ -228,6 +247,7 @@ export const Dashboard = ({ evaluations = [], employees = [], initialTab }: { ev
       setDateStart('');
       setDateEnd('');
       setActiveFilterLabel('Todo o período');
+      setOverviewSections({ scorecards: true, rankings: true, health: true, distributions: true, performance: true, highlights: true, employees: true, disc: true });
       setEmployeeSearchTerm('');
       setSectorSearchTerm('');
       setStatusSearchTerm('');
@@ -618,6 +638,35 @@ export const Dashboard = ({ evaluations = [], employees = [], initialTab }: { ev
             </div>
           </div>
 
+          {/* O que mostrar no Dashboard (Saúde da Empresa) */}
+          {activeTab === 'overview' && (
+            <div className="space-y-3 pt-4 border-t border-gray-200 dark:border-navy-700">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">O que mostrar no Dashboard</label>
+              <div className="space-y-2">
+                {[
+                  { key: 'scorecards', label: 'Scorecards' },
+                  { key: 'rankings', label: 'Rankings (Setor/Cargo)' },
+                  { key: 'health', label: 'Saúde da Empresa' },
+                  { key: 'distributions', label: 'Distribuições' },
+                  { key: 'performance', label: 'Tabela de Performance' },
+                  { key: 'highlights', label: 'Destaques' },
+                  { key: 'employees', label: 'Colaboradores' },
+                  { key: 'disc', label: 'DISC' },
+                ].map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={overviewSections[key as keyof typeof overviewSections]}
+                      onChange={(e) => setOverviewSections((prev) => ({ ...prev, [key]: e.target.checked }))}
+                      className="rounded text-blue-600"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Indicador de Filtros Ativos */}
           {(selectedSectors.length > 0 || selectedEmployees.length > 0 || selectedStatuses.length !== 1 || selectedStatuses[0] !== 'Ativo' || dateStart || dateEnd) && (
             <div className="space-y-2 pt-4 border-t border-gray-200 dark:border-navy-700">
@@ -670,18 +719,65 @@ export const Dashboard = ({ evaluations = [], employees = [], initialTab }: { ev
             </div>
           )}
 
-          {/* Botão de Exportação */}
+          {/* Exportação - Overview com seções ou Dashboard completo */}
           {evaluations.length > 0 && (
-            <div className="pt-4 border-t border-gray-200 dark:border-navy-700">
-              <ReportExporter
-                title="Dashboard de Desempenho"
-                contentRef={dashboardContentRef}
-                generalMetrics={analytics.generalMetrics}
-                competenceMetrics={analytics.competenceMetrics}
-                comparativeMetrics={analytics.comparativeMetrics}
-                companyName={currentCompany?.name || 'Empresa'}
-                exportType="dashboard"
-              />
+            <div className="pt-4 border-t border-gray-200 dark:border-navy-700 space-y-3">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Exportar</label>
+              {activeTab === 'overview' ? (
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={async () => {
+                      setExportingOverviewExcel(true);
+                      try {
+                        exportOverviewToExcel(
+                          analytics.generalMetrics,
+                          analytics.competenceMetrics,
+                          currentCompany?.name || 'Empresa',
+                          overviewSections
+                        );
+                        toast.success('Excel exportado com sucesso!');
+                      } catch (e) {
+                        toast.error('Erro ao exportar Excel.');
+                      } finally {
+                        setExportingOverviewExcel(false);
+                      }
+                    }}
+                    disabled={exportingOverviewExcel}
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {exportingOverviewExcel ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
+                    Exportar Excel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setExportingOverviewPDF(true);
+                      try {
+                        exportOverviewToPDF(analytics.generalMetrics, currentCompany?.name || 'Empresa', overviewSections);
+                        toast.success('PDF exportado com sucesso!');
+                      } catch (e) {
+                        toast.error('Erro ao exportar PDF.');
+                      } finally {
+                        setExportingOverviewPDF(false);
+                      }
+                    }}
+                    disabled={exportingOverviewPDF}
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {exportingOverviewPDF ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+                    Exportar PDF
+                  </button>
+                </div>
+              ) : (
+                <ReportExporter
+                  title="Dashboard de Desempenho"
+                  contentRef={dashboardContentRef}
+                  generalMetrics={analytics.generalMetrics}
+                  competenceMetrics={analytics.competenceMetrics}
+                  comparativeMetrics={analytics.comparativeMetrics}
+                  companyName={currentCompany?.name || 'Empresa'}
+                  exportType="dashboard"
+                />
+              )}
             </div>
           )}
         </div>
@@ -766,7 +862,14 @@ export const Dashboard = ({ evaluations = [], employees = [], initialTab }: { ev
           </div>
         ) : (
           <>
-            {activeTab === 'overview' && <CompanyOverview data={analytics.generalMetrics} competenceData={analytics.competenceMetrics} employees={employees} />}
+            {activeTab === 'overview' && (
+              <CompanyOverview
+                data={analytics.generalMetrics}
+                competenceData={analytics.competenceMetrics}
+                employees={employees}
+                visibleSections={overviewSections}
+              />
+            )}
             {activeTab === 'performance' && <PerformanceAnalysis data={analytics.competenceMetrics} />}
             {activeTab === 'individual' && <IndividualAnalysis data={analytics.comparativeMetrics} />}
             {activeTab === 'ranking' && (
