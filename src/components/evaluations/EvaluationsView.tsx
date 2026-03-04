@@ -21,6 +21,7 @@ interface Employee {
   sector: string;
   companyId: string;
   status?: string;
+  jobLevel?: string;
 }
 
 interface Role {

@@ -160,7 +160,7 @@ export function exportReportToPDF(
   drawHeader(yPos);
   yPos += headerHeight + 4;
 
-  data.forEach((row, idx) => {
+  data.forEach((row) => {
     let rowHeight = lineHeight;
     const cellLines: string[][] = [];
     columns.forEach((col, i) => {
@@ -171,7 +171,7 @@ export function exportReportToPDF(
     });
 
     if (yPos + rowHeight > pageHeight - 15) {
-      pdf.addPage('l', 'a4');
+      pdf.addPage('l') // landscape (keeps current format, e.g. A4);
       yPos = 15;
       drawHeader(yPos);
       yPos += headerHeight + 4;
@@ -227,7 +227,6 @@ export function exportGeneralReportToPDF(
   const finalFilename = filename || `relatorio_geral_${new Date().toISOString().split('T')[0]}.pdf`;
   const pdf = new jsPDF('p', 'mm', 'a4'); // Resumo em retrato
   const pageWidth = 210;
-  const pageHeight = 297;
   const margin = 15;
 
   const addTitle = (title: string, y: number) => {
@@ -290,7 +289,7 @@ export function exportGeneralReportToPDF(
       const arr = sections[key as keyof typeof sections];
       if (!arr || !Array.isArray(arr) || arr.length === 0) return;
 
-      pdf.addPage('l', 'a4'); // Nova página em Paisagem para tabelas
+      pdf.addPage('l') // landscape (keeps current format, e.g. A4); // Nova página em Paisagem para tabelas
       yPos = 15;
       setPdfTextColor(pdf, COLORS.text);
       pdf.setFontSize(14);
@@ -330,7 +329,7 @@ export function exportGeneralReportToPDF(
         });
 
         if (yPos + rowHeight > secPageHeight - 12) {
-          pdf.addPage('l', 'a4');
+          pdf.addPage('l') // landscape (keeps current format, e.g. A4);
           yPos = 15;
         }
 
