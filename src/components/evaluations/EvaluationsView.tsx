@@ -172,7 +172,10 @@ const EvaluationForm = ({ onSuccess }: { onSuccess: () => void }) => {
     if (emp) {
       setCurrentEmployee(emp);
       const roleData = roles.find(r => r.name === emp.role);
-      setFormType(emp.jobLevel || roleData?.level || 'Operacional');
+      // Prioriza nível do colaborador (jobLevel); aceita também "nivel"/"level" por compatibilidade
+      const rawLevel = emp.jobLevel ?? (emp as Record<string, unknown>).nivel ?? (emp as Record<string, unknown>).level;
+      const employeeLevel = typeof rawLevel === 'string' ? rawLevel.trim() || undefined : undefined;
+      setFormType(employeeLevel || roleData?.level || 'Operacional');
       setScores({});
     }
   }, [selectedEmployeeId, employees, roles]);
