@@ -92,15 +92,25 @@ export const useDashboardAnalytics = (
           normalizedType = 'Operacional';
         }
       }
+
+      // Prioriza nível do perfil do funcionário (jobLevel) para exibição/agregação quando disponível,
+      // para que funcionários marcados como Tático apareçam com métricas de nível tático
+      const jobLevel = employeeData?.jobLevel;
+      let realType = normalizedType;
+      if (jobLevel && typeof jobLevel === 'string') {
+        const j = jobLevel.trim().toLowerCase();
+        if (j.includes('estrat') || j.includes('estrateg')) realType = 'Estratégico';
+        else if (j.includes('tatic') || j.includes('tático')) realType = 'Tático';
+        else if (j.includes('oper') || j.includes('operacional') || j.includes('colaborador') || j.includes('líder') || j.includes('lider')) realType = 'Operacional';
+      }
       
       return {
         ...ev,
         realName: resolvedName || 'Colaborador Desconhecido',
-        // IMPORTANTE: Sempre usar os valores salvos na avaliação (ev.sector, ev.role, ev.type)
-        // para preservar o histórico. Não usar employeeData como fallback para não "sujar" os dados históricos
-        realSector: ev.sector || 'Geral', // Não usar employeeData?.sector para preservar histórico
-        realRole: ev.role || 'Não definido', // Não usar employeeData?.role para preservar histórico
-        realType: normalizedType, // Nível normalizado: Estratégico, Tático, Operacional (já vem de ev.type)
+        // Sector/role preservam histórico; realType usa jobLevel do funcionário quando setado para alinhar métricas ao perfil
+        realSector: ev.sector || 'Geral',
+        realRole: ev.role || 'Não definido',
+        realType,
         realStatus: employeeStatus, // Status do funcionário (pode usar employeeData pois status não afeta histórico de avaliações)
         realDiscProfile: employeeData?.discProfile || null, // Perfil DISC do funcionário
         score,

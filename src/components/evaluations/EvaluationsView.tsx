@@ -171,12 +171,7 @@ const EvaluationForm = ({ onSuccess }: { onSuccess: () => void }) => {
     if (emp) {
       setCurrentEmployee(emp);
       const roleData = roles.find(r => r.name === emp.role);
-      
-      if (roleData?.level) {
-         setFormType(roleData.level);
-      } else {
-         setFormType('Operacional');
-      }
+      setFormType(emp.jobLevel || roleData?.level || 'Operacional');
       setScores({});
     }
   }, [selectedEmployeeId, employees, roles]);

@@ -801,6 +801,7 @@ export const EmployeeProfile = () => {
                   const monthYear = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
                   const score = evaluation.average || evaluation.score || 0;
                   const metricsCount = Object.keys(evaluation.details || {}).length;
+                  const displayLevel = employee?.jobLevel || evaluation.type;
                   
                   return (
                     <React.Fragment key={evaluation.id}>
@@ -808,13 +809,13 @@ export const EmployeeProfile = () => {
                         <td className="p-4 text-gray-700 dark:text-gray-300 capitalize">{monthYear}</td>
                         <td className="p-4">
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            evaluation.type === 'Estratégico' 
+                            displayLevel === 'Estratégico' 
                               ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                              : evaluation.type === 'Tático'
+                              : displayLevel === 'Tático'
                               ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
                               : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                           }`}>
-                            {evaluation.type}
+                            {displayLevel}
                           </span>
                         </td>
                         <td className="p-4 text-gray-600 dark:text-gray-400">
