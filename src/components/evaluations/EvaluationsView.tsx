@@ -12,6 +12,7 @@ import { Modal } from '../ui/Modal';
 import { toast } from '../../utils/toast';
 import { useAuditLogger } from '../../utils/auditLogger';
 import { formatShortName } from '../../utils/nameFormatter';
+import { getMonthKey, getYearFromDateStr, formatDateOnlyPtBR, getDateOnlyTimestamp } from '../../utils/date';
 
 // --- Interfaces para Tipagem ---
 interface Employee {
@@ -640,7 +641,7 @@ const EvaluationsTable = () => {
       
       const snap = await getDocs(q);
       const raw = snap.docs.map(d => ({ id: d.id, ...d.data() } as EvaluationData));
-      raw.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      raw.sort((a, b) => getDateOnlyTimestamp(b.date) - getDateOnlyTimestamp(a.date));
       setData(raw);
       setFilteredData(raw);
     } catch (err) {
@@ -687,22 +688,19 @@ const EvaluationsTable = () => {
     }
     if (filterMonth) {
       res = res.filter(d => {
-        const date = new Date(d.date);
-        return (date.getMonth() + 1).toString().padStart(2, '0') === filterMonth;
+        const key = getMonthKey(d.date);
+        return key && key.slice(5) === filterMonth && (!filterYear || key.slice(0, 4) === filterYear);
       });
     }
     if (filterYear) {
-      res = res.filter(d => {
-        const date = new Date(d.date);
-        return date.getFullYear().toString() === filterYear;
-      });
+      res = res.filter(d => getYearFromDateStr(d.date) === filterYear);
     }
     
-    // Ordenação
+    // Ordenação (usa timestamp sem timezone para datas YYYY-MM-DD)
     if (sortOrder === 'recent') {
-      res.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      res.sort((a, b) => getDateOnlyTimestamp(b.date) - getDateOnlyTimestamp(a.date));
     } else {
-      res.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      res.sort((a, b) => getDateOnlyTimestamp(a.date) - getDateOnlyTimestamp(b.date));
     }
     
     setFilteredData(res);
@@ -739,8 +737,8 @@ const EvaluationsTable = () => {
       
       switch (tableSort.field) {
         case 'date':
-          aVal = new Date(a.date).getTime();
-          bVal = new Date(b.date).getTime();
+          aVal = getDateOnlyTimestamp(a.date);
+          bVal = getDateOnlyTimestamp(b.date);
           break;
         case 'employeeName':
           aVal = a.employeeName.toLowerCase();
@@ -894,10 +892,7 @@ const EvaluationsTable = () => {
     link.click();
   };
 
-  const uniqueYears = Array.from(new Set(data.map(d => {
-    const date = new Date(d.date);
-    return date.getFullYear().toString();
-  }))).sort((a, b) => parseInt(b) - parseInt(a));
+  const uniqueYears = Array.from(new Set(data.map(d => getYearFromDateStr(d.date)).filter(Boolean))).sort((a, b) => parseInt(b) - parseInt(a));
 
   const sectors = Array.from(new Set(data.map(d => d.sector))).sort();
   const roles = Array.from(new Set(data.map(d => d.role))).sort();
@@ -908,8 +903,8 @@ const EvaluationsTable = () => {
     const grouped: Record<string, EvaluationData[]> = {};
     
     sortedTableData.forEach((ev) => {
-      const date = new Date(ev.date);
-      const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+      const monthKey = getMonthKey(ev.date);
+      if (!monthKey) return;
       if (!grouped[monthKey]) {
         grouped[monthKey] = [];
       }
@@ -918,7 +913,7 @@ const EvaluationsTable = () => {
 
     // Ordenar avaliações dentro de cada grupo por data (mais recente primeiro)
     Object.values(grouped).forEach(group => {
-      group.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      group.sort((a, b) => getDateOnlyTimestamp(b.date) - getDateOnlyTimestamp(a.date));
     });
 
     // Ordenar grupos por data (mais recente primeiro)
@@ -1333,7 +1328,7 @@ const EvaluationsTable = () => {
                         <td className="p-4 text-gray-500 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                               <Calendar size={14}/> 
-                              {new Date(ev.date).toLocaleDateString('pt-BR', {timeZone: 'UTC', month: 'long', year: 'numeric'})}
+                              {formatDateOnlyPtBR(ev.date, { month: 'long', year: 'numeric' })}
                           </div>
                         </td>
                         <td className="p-4">
@@ -1469,7 +1464,7 @@ const EvaluationsTable = () => {
                 <div>
                   <span className="text-gray-600 dark:text-gray-400">Data:</span>
                   <span className="ml-2 font-medium text-gray-800 dark:text-white">
-                    {new Date(selectedEvaluation.date).toLocaleDateString('pt-BR')}
+                    {formatDateOnlyPtBR(selectedEvaluation.date, { day: '2-digit', month: '2-digit', year: 'numeric' })}
                   </span>
                 </div>
               </div>

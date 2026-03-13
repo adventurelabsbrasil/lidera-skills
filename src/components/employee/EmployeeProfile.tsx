@@ -17,6 +17,7 @@ import { getAuditLogs, AuditLog } from '../../services/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAuditLogger } from '../../utils/auditLogger';
 import { getInitials } from '../../utils/nameFormatter';
+import { formatDateOnlyPtBR, getDateOnlyTimestamp } from '../../utils/date';
 
 interface Evaluation {
   id: string;
@@ -235,7 +236,7 @@ export const EmployeeProfile = () => {
             return ev.employeeId === employeeId || 
                    (empData && ev.employeeName === empData.name);
           })
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          .sort((a, b) => getDateOnlyTimestamp(b.date) - getDateOnlyTimestamp(a.date));
         
         setEvaluations(evals);
       } catch (error) {
@@ -373,17 +374,14 @@ export const EmployeeProfile = () => {
     return criterion?.name || criteriaId;
   };
 
-  // Processar dados para gráficos
+  // Processar dados para gráficos (formatação sem deslocamento de timezone)
   const chartData = useMemo(() => {
-    return evaluations.map(ev => {
-      const date = new Date(ev.date);
-      return {
-        month: date.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }),
-        monthYear: date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
-        score: ev.average || ev.score || 0,
-        date: ev.date
-      };
-    }).reverse(); // Mais antigo primeiro para o gráfico
+    return evaluations.map(ev => ({
+      month: formatDateOnlyPtBR(ev.date, { month: 'short', year: 'numeric' }),
+      monthYear: formatDateOnlyPtBR(ev.date, { month: 'long', year: 'numeric' }),
+      score: ev.average || ev.score || 0,
+      date: ev.date
+    })).reverse(); // Mais antigo primeiro para o gráfico
   }, [evaluations]);
 
   // Métricas resumidas
@@ -430,8 +428,8 @@ export const EmployeeProfile = () => {
         
         switch (tableSort.field) {
           case 'date':
-            aVal = new Date(a.date).getTime();
-            bVal = new Date(b.date).getTime();
+            aVal = getDateOnlyTimestamp(a.date);
+            bVal = getDateOnlyTimestamp(b.date);
             break;
           case 'score':
             aVal = a.average || a.score || 0;
@@ -797,8 +795,7 @@ export const EmployeeProfile = () => {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {sortedTableData.map((evaluation) => {
-                  const date = new Date(evaluation.date);
-                  const monthYear = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                  const monthYear = formatDateOnlyPtBR(evaluation.date, { month: 'long', year: 'numeric' });
                   const score = evaluation.average || evaluation.score || 0;
                   const metricsCount = Object.keys(evaluation.details || {}).length;
                   const displayLevel = employee?.jobLevel || evaluation.type;

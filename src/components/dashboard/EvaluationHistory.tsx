@@ -5,6 +5,7 @@ import { fetchCollection } from '../../services/firebase';
 import { DataImporter } from '../settings/DataImporter';
 import { useCompany } from '../../contexts/CompanyContext';
 import { formatShortName } from '../../utils/nameFormatter';
+import { formatDateOnlyPtBR, getDateOnlyTimestamp } from '../../utils/date';
 
 // Interface Unificada
 interface Evaluation {
@@ -85,7 +86,7 @@ export const EvaluationHistory = () => {
         displaySector: officialEmp?.sector || ev.sector || '-',
         normalizedScore: finalScore || 0
       };
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }).sort((a, b) => getDateOnlyTimestamp(b.date) - getDateOnlyTimestamp(a.date));
   }, [evaluations, employees]);
 
   // --- Camada 1: Resumo por Período ---
@@ -93,11 +94,9 @@ export const EvaluationHistory = () => {
     const groups: Record<string, { count: number; totalScore: number; rawDate: string }> = {};
 
     processedEvaluations.forEach(item => {
-      if (!item.date) return;
-      const dateObj = new Date(item.date);
-      if (isNaN(dateObj.getTime())) return;
+      if (!item.date || item.date.length < 10) return;
 
-      const periodKey = dateObj.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      const periodKey = formatDateOnlyPtBR(item.date, { month: 'long', year: 'numeric' });
 
       if (!groups[periodKey]) {
         groups[periodKey] = { count: 0, totalScore: 0, rawDate: item.date };
@@ -113,7 +112,7 @@ export const EvaluationHistory = () => {
         average: (data.totalScore / data.count).toFixed(1).replace('.', ','),
         rawDate: data.rawDate
       }))
-      .sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
+      .sort((a, b) => getDateOnlyTimestamp(b.rawDate) - getDateOnlyTimestamp(a.rawDate));
   }, [processedEvaluations]);
 
   // --- Camada 2: Filtro da Lista ---
@@ -121,7 +120,7 @@ export const EvaluationHistory = () => {
     if (!selectedPeriod) return [];
     return processedEvaluations.filter(item => {
       if (!item.date) return false;
-      const itemPeriod = new Date(item.date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      const itemPeriod = formatDateOnlyPtBR(item.date, { month: 'long', year: 'numeric' });
       return itemPeriod === selectedPeriod;
     });
   }, [selectedPeriod, processedEvaluations]);

@@ -81,21 +81,20 @@ export const RankingView = ({ evaluations = [], employees = [], filters }: Ranki
 
   // Processar avaliações e calcular pontuação acumulada
   const processedRankings = useMemo(() => {
-    // Filtrar avaliações por período e status
+    // Filtrar avaliações por período e status (comparação por data YYYY-MM-DD, sem timezone)
     let filtered = evaluations.filter((ev: any) => {
-      // Filtro de data
+      // Filtro de data: compara strings YYYY-MM-DD para evitar deslocamento de fuso
       if (filters.dateStart || filters.dateEnd) {
-        const evDate = ev.date ? new Date(ev.date) : null;
-        if (!evDate) return false;
-        
+        const evDateStr = ev.date ? String(ev.date).slice(0, 10) : '';
+        if (!evDateStr) return false;
+
         if (filters.dateStart) {
-          const startDate = new Date(filters.dateStart);
-          if (evDate < startDate) return false;
+          const startStr = filters.dateStart.slice(0, 10);
+          if (evDateStr < startStr) return false;
         }
         if (filters.dateEnd) {
-          const endDate = new Date(filters.dateEnd);
-          endDate.setHours(23, 59, 59, 999);
-          if (evDate > endDate) return false;
+          const endStr = filters.dateEnd.slice(0, 10);
+          if (evDateStr > endStr) return false;
         }
       }
 
