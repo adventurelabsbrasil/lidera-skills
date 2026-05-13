@@ -12,19 +12,22 @@ import { WelcomeView } from './components/welcome/WelcomeView';
 import { EmployeeProfile } from './components/employee/EmployeeProfile';
 import { ReportsView } from './components/reports/ReportsView';
 import { fetchCollection } from './services/firebase';
+import { sendPasswordReset } from './services/userManagement';
+import { toast } from 'sonner';
 import { ThemeToggle } from './components/ui/ThemeToggle';
 import { Toaster } from './components/ui/Toaster';
 
-import { 
-  CriteriaView, 
-  SectorsView, 
-  RolesView, 
-  EmployeesView, 
+import {
+  CriteriaView,
+  SectorsView,
+  RolesView,
+  EmployeesView,
   UsersView,
   CompaniesView,
   HistoryImportView, // <--- Importação da nova View
   GoalsView
 } from './components/settings/Registers';
+import { AccessLevelsView } from './components/admin/AccessLevelsView';
 
 import { 
   LayoutDashboard, 
@@ -44,6 +47,7 @@ import {
   Building,
   FileSpreadsheet,
   FileBarChart,
+  ShieldCheck,
   type LucideIcon
 } from 'lucide-react';
 
@@ -98,7 +102,13 @@ function DashboardWrapper() {
 
 function SettingsWrapper() {
   const { view } = useParams<{ view: string }>();
-  const { isMaster } = useCompany();
+  const { level } = useAuth();
+  // Capabilities derivadas do nível efetivo (cobre legado + legacy initial owner).
+  const canSeeCadastros = level === 'L0' || level === 'L1' || level === 'L2';
+  const canSeePessoas = level === 'L0' || level === 'L1' || level === 'L2';
+  const canSeeDados = level === 'L0' || level === 'L1';
+  const canManageAccessLevels = level === 'L0' || level === 'L1';
+  const canSeeCompanies = level === 'L0'; // só Adventure/Lidera
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -136,48 +146,64 @@ function SettingsWrapper() {
       <aside className={`md:w-64 flex-shrink-0 ${isSidebarOpen ? 'block' : 'hidden md:block'}`}>
         <div className="bg-white dark:bg-lidera-gray rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-4 sticky top-24">
           
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Cadastros Gerais</h3>
-          <div className="space-y-1">
-            <SettingsButton view="criteria" icon={ClipboardList} label="Critérios" />
-            <SettingsButton view="sectors" icon={Layers} label="Setores" />
-            <SettingsButton view="roles" icon={Briefcase} label="Cargos" />
-          </div>
+          {canSeeCadastros && (
+            <>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Cadastros Gerais</h3>
+              <div className="space-y-1">
+                <SettingsButton view="criteria" icon={ClipboardList} label="Critérios" />
+                <SettingsButton view="sectors" icon={Layers} label="Setores" />
+                <SettingsButton view="roles" icon={Briefcase} label="Cargos" />
+              </div>
+              <div className="my-4 border-t border-gray-100 dark:border-gray-800"></div>
+            </>
+          )}
 
-          <div className="my-4 border-t border-gray-100 dark:border-gray-800"></div>
-          
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Pessoas</h3>
-          <div className="space-y-1">
-            <SettingsButton view="employees" icon={Users} label="Funcionários" />
-            <SettingsButton view="users" icon={UserCog} label="Usuários" />
-          </div>
+          {canSeePessoas && (
+            <>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Pessoas</h3>
+              <div className="space-y-1">
+                <SettingsButton view="employees" icon={Users} label="Funcionários" />
+                <SettingsButton view="users" icon={UserCog} label="Usuários" />
+              </div>
+              <div className="my-4 border-t border-gray-100 dark:border-gray-800"></div>
+            </>
+          )}
 
-          <div className="my-4 border-t border-gray-100 dark:border-gray-800"></div>
-          
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Dados</h3>
-          <div className="space-y-1">
-            <SettingsButton view="import" icon={FileSpreadsheet} label="Importar Histórico" />
-            <SettingsButton view="goals" icon={Target} label="Metas de Desempenho" />
-          </div>
+          {canSeeDados && (
+            <>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Dados</h3>
+              <div className="space-y-1">
+                <SettingsButton view="import" icon={FileSpreadsheet} label="Importar Histórico" />
+                <SettingsButton view="goals" icon={Target} label="Metas de Desempenho" />
+              </div>
+            </>
+          )}
 
-          {isMaster && (
+          {(canSeeCompanies || canManageAccessLevels) && (
             <>
               <div className="my-4 border-t border-gray-100 dark:border-gray-800"></div>
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Admin</h3>
-              <SettingsButton view="companies" icon={Building} label="Empresas" />
+              {canSeeCompanies && (
+                <SettingsButton view="companies" icon={Building} label="Empresas" />
+              )}
+              {canManageAccessLevels && (
+                <SettingsButton view="access" icon={ShieldCheck} label="Níveis de Acesso" />
+              )}
             </>
           )}
         </div>
       </aside>
 
       <section className="flex-1 min-w-0">
-        {view === 'criteria' && <CriteriaView />}
-        {view === 'sectors' && <SectorsView />}
-        {view === 'roles' && <RolesView />}
-        {view === 'employees' && <EmployeesView />}
-        {view === 'users' && <UsersView />}
-        {view === 'import' && <HistoryImportView />}
-        {view === 'goals' && <GoalsView />}
-        {isMaster && view === 'companies' && <CompaniesView />}
+        {canSeeCadastros && view === 'criteria' && <CriteriaView />}
+        {canSeeCadastros && view === 'sectors' && <SectorsView />}
+        {canSeeCadastros && view === 'roles' && <RolesView />}
+        {canSeePessoas && view === 'employees' && <EmployeesView />}
+        {canSeePessoas && view === 'users' && <UsersView />}
+        {canSeeDados && view === 'import' && <HistoryImportView />}
+        {canSeeDados && view === 'goals' && <GoalsView />}
+        {canSeeCompanies && view === 'companies' && <CompaniesView />}
+        {canManageAccessLevels && view === 'access' && <AccessLevelsView />}
       </section>
     </div>
   );
@@ -185,7 +211,10 @@ function SettingsWrapper() {
 
 function MainApp() {
   const { currentCompany } = useCompany();
-  const { signOut } = useAuth();
+  const { signOut, level } = useAuth();
+  // L3 é read-only e não tem acesso a nenhum item de Configurações;
+  // esconder o tab do nav top evita confusão e ações barradas pelas rules.
+  const showSettingsNav = level !== 'L3';
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -283,7 +312,9 @@ function MainApp() {
               <NavButton view="evaluations" icon={FileCheck} label="Avaliações" />
               <NavButton view="history" icon={History} label="Histórico" />
               <NavButton view="reports" icon={FileBarChart} label="Relatórios" />
-              <NavButton view="settings" icon={Settings} label="Configurações" />
+              {showSettingsNav && (
+                <NavButton view="settings" icon={Settings} label="Configurações" />
+              )}
               <NavButton view="help" icon={HelpCircle} label="Ajuda" />
             </nav>
 
@@ -343,18 +374,38 @@ function AppContent() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+  const [resetSending, setResetSending] = useState(false);
+
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-    
+
     try {
       await signInWithEmail(email, password);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao fazer login. Verifique suas credenciais.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao fazer login. Verifique suas credenciais.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (resetSending) return;
+    const target = email.trim();
+    if (!target) {
+      toast.error('Digite seu email no campo acima antes de pedir o reset.');
+      return;
+    }
+    setResetSending(true);
+    try {
+      await sendPasswordReset(target);
+      toast.success(`Email com link para redefinir senha enviado para ${target}.`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error('Não foi possível enviar o email: ' + msg);
+    } finally {
+      setResetSending(false);
     }
   };
   
@@ -437,6 +488,17 @@ function AppContent() {
                   'Entrar'
                 )}
               </button>
+
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={handlePasswordReset}
+                  disabled={resetSending}
+                  className="text-sm text-gray-500 hover:text-yellow-600 dark:text-gray-400 dark:hover:text-yellow-400 underline disabled:opacity-50"
+                >
+                  {resetSending ? 'Enviando…' : 'Esqueci minha senha'}
+                </button>
+              </div>
             </form>
             
             {/* Divisor */}

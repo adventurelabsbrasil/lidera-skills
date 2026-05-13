@@ -3,8 +3,9 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, signInWithEmailA
 import { getFirestore, collection, getDocs, query, where, addDoc, doc, getDoc, setDoc, deleteDoc, limit, startAfter, QueryDocumentSnapshot, DocumentData, Query, orderBy } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Configuração do Firebase usando variáveis de ambiente
-const firebaseConfig = {
+// Configuração do Firebase usando variáveis de ambiente. Exportada para o
+// secondary auth app de criação de usuários (src/services/userManagement.ts).
+export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDjyKAT2aZ4A3OrqaM8a6E6c0ht12BT278",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "lidera-skills.firebaseapp.com",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "lidera-skills",
@@ -193,13 +194,34 @@ export const fetchCollectionPaginated = async (
 
 // --- SISTEMA DE ROLES ---
 
+/**
+ * Nível de acesso (RBAC). Campo separado de `role` (que descreve função do
+ * usuário em avaliações — gestor/líder/colaborador). Os 4 níveis controlam
+ * isolamento multi-tenant e granularidade de leitura/escrita no Firestore.
+ *
+ * L0 — Dev/Admin Adventure+Lidera: vê todos os tenants, cria qualquer nível.
+ * L1 — Owner do tenant: tudo dentro do tenant, cria L2/L3 do próprio tenant.
+ * L2 — Gestor: tudo dentro do tenant, não cria usuários.
+ * L3 — Líder de setor: só dados dos setores em `sectorIds`, não cria usuários.
+ */
+export type AccessLevel = 'L0' | 'L1' | 'L2' | 'L3';
+
 export interface UserRole {
   id: string;
   userId: string;
   email: string;
   role: 'master' | 'admin' | 'gestor' | 'lider' | 'colaborador' | 'company';
-  /** Para role 'company': ID da única empresa que o usuário pode acessar/avaliar */
+  /**
+   * Nível de acesso RBAC. Opcional durante janela de migração: docs antigos
+   * sem `level` derivam do `role` legado (`master`→L0, `company`→L1) via
+   * `scripts/migrate-user-roles-to-levels.ts`. Após migração completa, este
+   * campo passa a ser obrigatório e `role` fica como rótulo funcional.
+   */
+  level?: AccessLevel;
+  /** Para L1/L2/L3 e role 'company': ID da empresa permitida. Null/undefined para L0. */
   companyId?: string;
+  /** Para L3: IDs dos setores que o usuário lidera. Vazio/undefined nos demais níveis. */
+  sectorIds?: string[];
   companyIds?: string[]; // Empresas que o usuário tem acesso (se aplicável, para outros roles)
   createdAt: string;
   updatedAt: string;
