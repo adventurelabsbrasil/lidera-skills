@@ -95,7 +95,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const level: AccessLevel | null = effectiveLevel(userRole, isLegacyInitialOwner);
   const allowedSectorIds: string[] =
     level === 'L3' ? userRole?.sectorIds ?? [] : [];
-  const allowedCompanyId = userRole?.role === 'company' && userRole?.companyId ? userRole.companyId : null;
+  // Qualquer nível com tenant restrito (L1/L2/L3 novos OU role 'company' legado)
+  // tem companyId permitido. Apenas L0 e legacy initial owner (sem doc) podem
+  // ler todas as empresas via fetchCollection — os demais precisam usar
+  // getCompany(allowedCompanyId) para evitar permission-denied no list.
+  const allowedCompanyId =
+    level && level !== 'L0' && userRole?.companyId
+      ? userRole.companyId
+      : null;
 
   return (
     <AuthContext.Provider value={{
