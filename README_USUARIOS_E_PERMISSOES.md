@@ -4,6 +4,27 @@ Este documento descreve como adicionar novos usuários e atribuir permissões es
 
 ---
 
+> ⚠️ **Modelo em transição (issue #4):** o sistema está migrando de `master/company`
+> para o modelo **L0/L1/L2/L3** (dev → tenant owner → gestor → líder de setor).
+> Durante a janela de migração as `firestore.rules` aceitam ambos. Quando todos
+> os docs em `user_roles` tiverem `level` populado, o fallback `role` legado será
+> removido. Para popular o `level` em docs existentes:
+>
+> ```bash
+> # 1. Dry-run (recomendado primeiro)
+> GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json \
+>   npx tsx scripts/migrate-user-roles-to-levels.ts --dry-run
+>
+> # 2. Aplicar
+> GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json \
+>   npx tsx scripts/migrate-user-roles-to-levels.ts
+> ```
+>
+> Service account JSON: Firebase Console > Project Settings > Service Accounts > Generate new private key.
+> Salvar fora do repo (`.gitignore` já cobre `.env*`; SA pode ir em `~/.config/firebase/lidera-skills-sa.json` ou Infisical).
+
+---
+
 ## ⚠️ Importante: regras + documento em `user_roles`
 
 **Só publicar as regras no Firebase não restringe o acesso.** Para um usuário ter acesso só à empresa dele, é obrigatório:

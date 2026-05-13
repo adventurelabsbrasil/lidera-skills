@@ -1,159 +1,275 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper function to check if user is authenticated
+
+    // =====================================================================
+    // AUTH HELPERS
+    // =====================================================================
+
     function isAuthenticated() {
       return request.auth != null;
     }
-    
-    // Helper: reference to current user's role document
-    function userRoleRef() {
-      return get(/databases/$(database)/documents/user_roles/$(request.auth.uid));
-    }
-    
-    // Helper function to check if user is master
-    function isMaster() {
-      return isAuthenticated() && 
-             exists(/databases/$(database)/documents/user_roles/$(request.auth.uid)) &&
-             userRoleRef().data.role == 'master';
-    }
-    
-    // Helper: user has role 'company' (acesso restrito a uma empresa)
-    function isCompanyUser() {
+
+    function hasUserRole() {
       return isAuthenticated() &&
-             exists(/databases/$(database)/documents/user_roles/$(request.auth.uid)) &&
-             userRoleRef().data.role == 'company';
+             exists(/databases/$(database)/documents/user_roles/$(request.auth.uid));
     }
-    
-    // Helper: companyId permitido para usuário com role 'company'
-    function getUserCompanyId() {
-      return userRoleRef().data.companyId;
+
+    function userRole() {
+      return get(/databases/$(database)/documents/user_roles/$(request.auth.uid)).data;
     }
-    
-    // Helper function to check if user can manage users
-    // Permite se é master OU se não tem user_roles configurado (dono inicial)
-    function canManageUsers() {
-      return isAuthenticated() && (
-        isMaster() ||
-        !exists(/databases/$(database)/documents/user_roles/$(request.auth.uid))
-      );
+
+    // Legacy fallback: usuários sem documento em user_roles são tratados como
+    // "dono inicial" (L0). Mantido durante janela de migração; remover quando
+    // todos os user_roles tiverem `level` populado.
+    function isLegacyInitialOwner() {
+      return isAuthenticated() && !hasUserRole();
     }
-    
-    // Helper function to check if user has access to company
-    // Master ou sem role: acesso a todas. Role 'company': apenas à empresa vinculada.
-    function hasCompanyAccess(companyId) {
-      return isAuthenticated() && (
-        isMaster() ||
-        !exists(/databases/$(database)/documents/user_roles/$(request.auth.uid)) ||
-        (isCompanyUser() && companyId == getUserCompanyId())
-      );
+
+    // =====================================================================
+    // ACCESS LEVELS (RBAC L0-L3)
+    //
+    // L0 — Dev/Admin Adventure+Lidera: todos os tenants, qualquer escrita.
+    // L1 — Owner do tenant: tudo dentro do tenant, cria L2/L3 do próprio tenant.
+    // L2 — Gestor: tudo dentro do tenant, não cria usuários.
+    // L3 — Líder de setor: leitura do tenant (UI filtra por setor); sem write
+    //      em coleções compartilhadas. Granularidade fina por setor é aplicada
+    //      client-side via `user_roles.sectorIds` até evaluations.sectorId ser
+    //      denormalizado (follow-up).
+    // =====================================================================
+
+    function isL0() {
+      // Novo modelo: level == 'L0'. Legado: role == 'master' OU sem doc.
+      return isLegacyInitialOwner() ||
+             (hasUserRole() && (
+               userRole().level == 'L0' ||
+               userRole().role == 'master'
+             ));
     }
-    
-    // Companies collection - master/sem role: todas; role company: só a empresa vinculada
+
+    function isL1Tenant(companyId) {
+      // Novo: level == 'L1' e companyId match. Legado: role == 'company'.
+      return hasUserRole() && companyId != null && (
+               (userRole().level == 'L1' && userRole().companyId == companyId) ||
+               (userRole().role == 'company' && userRole().companyId == companyId)
+             );
+    }
+
+    function isL2Tenant(companyId) {
+      return hasUserRole() && companyId != null &&
+             userRole().level == 'L2' && userRole().companyId == companyId;
+    }
+
+    function isL3Tenant(companyId) {
+      return hasUserRole() && companyId != null &&
+             userRole().level == 'L3' && userRole().companyId == companyId;
+    }
+
+    // L0 OU qualquer nível com acesso ao tenant. Usado para read amplo.
+    function canReadTenant(companyId) {
+      return isL0() ||
+             isL1Tenant(companyId) ||
+             isL2Tenant(companyId) ||
+             isL3Tenant(companyId);
+    }
+
+    // L0/L1/L2 do tenant. Usado para writes em dados de configuração
+    // (sectors, roles, criteria, employees, goals).
+    function canWriteTenant(companyId) {
+      return isL0() ||
+             isL1Tenant(companyId) ||
+             isL2Tenant(companyId);
+    }
+
+    // =====================================================================
+    // COMPANIES
+    // =====================================================================
+
     match /companies/{companyId} {
-      allow read: if isAuthenticated() && (
-        isMaster() ||
-        !exists(/databases/$(database)/documents/user_roles/$(request.auth.uid)) ||
-        (isCompanyUser() && companyId == getUserCompanyId())
-      );
-      allow create: if isMaster() || !exists(/databases/$(database)/documents/user_roles/$(request.auth.uid));
-      allow update, delete: if isMaster();
+      allow read: if canReadTenant(companyId);
+      allow create: if isL0();
+      allow update, delete: if isL0();
     }
-    
-    // User roles collection - only master can read/write
+
+    // =====================================================================
+    // USER ROLES
+    //
+    // - L0 lê/escreve qualquer.
+    // - L1 lê os user_roles do próprio tenant (pra listar sua equipe e criar
+    //   L2/L3). Escrita L1 é limitada a docs do mesmo tenant + level L2/L3
+    //   (não pode promover/rebaixar pra L0/L1).
+    // - L2/L3 leem só o próprio doc.
+    // =====================================================================
+
+    function l1CanWriteUserRole(newData) {
+      // L1 só cria/edita docs do próprio tenant, e só level L2 ou L3.
+      return hasUserRole() &&
+             userRole().level == 'L1' &&
+             newData.companyId == userRole().companyId &&
+             newData.level in ['L2', 'L3'];
+    }
+
     match /user_roles/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isMaster());
-      allow write: if isMaster();
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        isL0() ||
+        (hasUserRole() && userRole().level == 'L1' &&
+         resource.data.companyId == userRole().companyId)
+      );
+
+      allow create: if isL0() || l1CanWriteUserRole(request.resource.data);
+
+      allow update: if isL0() || (
+        l1CanWriteUserRole(request.resource.data) &&
+        // Não permite trocar o companyId do doc (defesa contra cross-tenant)
+        resource.data.companyId == request.resource.data.companyId
+      );
+
+      allow delete: if isL0();
     }
-    
-    // Universal collections (sectors, roles, evaluation_criteria)
+
+    // =====================================================================
+    // TENANT CONFIG (sectors, roles, evaluation_criteria)
+    //
+    // FIX #3: docs precisam ter `companyId` para isolamento. Docs sem
+    // companyId são tratados como "universais" — leitura aberta, escrita L0.
+    // =====================================================================
+
     match /sectors/{sectorId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        !('companyId' in resource.data) ||
+        resource.data.companyId == null ||
+        canReadTenant(resource.data.companyId)
+      );
+      allow create: if isAuthenticated() && (
+        ('companyId' in request.resource.data) && request.resource.data.companyId != null
+          ? canWriteTenant(request.resource.data.companyId)
+          : isL0()
+      );
+      allow update, delete: if isAuthenticated() && (
+        ('companyId' in resource.data) && resource.data.companyId != null
+          ? canWriteTenant(resource.data.companyId)
+          : isL0()
+      );
     }
-    
+
     match /roles/{roleId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        !('companyId' in resource.data) ||
+        resource.data.companyId == null ||
+        canReadTenant(resource.data.companyId)
+      );
+      allow create: if isAuthenticated() && (
+        ('companyId' in request.resource.data) && request.resource.data.companyId != null
+          ? canWriteTenant(request.resource.data.companyId)
+          : isL0()
+      );
+      allow update, delete: if isAuthenticated() && (
+        ('companyId' in resource.data) && resource.data.companyId != null
+          ? canWriteTenant(resource.data.companyId)
+          : isL0()
+      );
     }
-    
+
     match /evaluation_criteria/{criteriaId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        !('companyId' in resource.data) ||
+        resource.data.companyId == null ||
+        canReadTenant(resource.data.companyId)
+      );
+      allow create: if isAuthenticated() && (
+        ('companyId' in request.resource.data) && request.resource.data.companyId != null
+          ? canWriteTenant(request.resource.data.companyId)
+          : isL0()
+      );
+      allow update, delete: if isAuthenticated() && (
+        ('companyId' in resource.data) && resource.data.companyId != null
+          ? canWriteTenant(resource.data.companyId)
+          : isL0()
+      );
     }
-    
-    // Company-specific collections
+
+    // =====================================================================
+    // EMPLOYEES, EVALUATIONS, GOALS
+    //
+    // Read: L0/L1/L2/L3 do tenant (UI filtra por setor para L3).
+    // Write: L0/L1/L2 do tenant. L3 read-only no MVP — quando evaluations
+    // ganhar `sectorId` denormalizado, libera L3 escrever só no próprio setor.
+    // =====================================================================
+
     match /employees/{employeeId} {
-      // Permite leitura se usuário autenticado e tem acesso à empresa OU se não tem companyId
       allow read: if isAuthenticated() && (
-        !('companyId' in resource.data) || 
-        hasCompanyAccess(resource.data.companyId)
+        !('companyId' in resource.data) ||
+        canReadTenant(resource.data.companyId)
       );
-      
-      // Permite criação se usuário autenticado e tem acesso à empresa OU se não tem companyId
       allow create: if isAuthenticated() && (
-        !('companyId' in request.resource.data) || 
-        hasCompanyAccess(request.resource.data.companyId)
+        !('companyId' in request.resource.data) ||
+        canWriteTenant(request.resource.data.companyId)
       );
-      
-      // Permite atualização/exclusão se usuário autenticado e tem acesso à empresa
       allow update, delete: if isAuthenticated() && (
-        !('companyId' in resource.data) || 
-        hasCompanyAccess(resource.data.companyId)
+        !('companyId' in resource.data) ||
+        canWriteTenant(resource.data.companyId)
       );
     }
-    
+
     match /evaluations/{evaluationId} {
-      // Permite leitura se usuário autenticado e tem acesso à empresa OU se não tem companyId
       allow read: if isAuthenticated() && (
-        !('companyId' in resource.data) || 
-        hasCompanyAccess(resource.data.companyId)
+        !('companyId' in resource.data) ||
+        canReadTenant(resource.data.companyId)
       );
-      
-      // Permite criação se usuário autenticado e tem acesso à empresa OU se não tem companyId
       allow create: if isAuthenticated() && (
-        !('companyId' in request.resource.data) || 
-        hasCompanyAccess(request.resource.data.companyId)
+        !('companyId' in request.resource.data) ||
+        canWriteTenant(request.resource.data.companyId)
       );
-      
-      // Permite atualização/exclusão se usuário autenticado e tem acesso à empresa
       allow update, delete: if isAuthenticated() && (
-        !('companyId' in resource.data) || 
-        hasCompanyAccess(resource.data.companyId)
+        !('companyId' in resource.data) ||
+        canWriteTenant(resource.data.companyId)
       );
     }
-    
-    // Performance goals collection
+
     match /performance_goals/{goalId} {
       allow read: if isAuthenticated() && (
-        !('companyId' in resource.data) || 
-        hasCompanyAccess(resource.data.companyId)
+        !('companyId' in resource.data) ||
+        canReadTenant(resource.data.companyId)
       );
       allow write: if isAuthenticated() && (
-        !('companyId' in request.resource.data) || 
-        hasCompanyAccess(request.resource.data.companyId)
+        !('companyId' in request.resource.data) ||
+        canWriteTenant(request.resource.data.companyId)
       );
     }
-    
-    // Audit logs collection
+
+    // =====================================================================
+    // AUDIT LOGS
+    //
+    // Read: L0/L1/L2 do tenant. L3 não lê audit log (sensível).
+    // Create: qualquer autenticado (toda ação registrada deve gravar).
+    // Update/delete: bloqueado — audit log é append-only.
+    // =====================================================================
+
     match /audit_logs/{logId} {
       allow read: if isAuthenticated() && (
-        !('companyId' in resource.data) || 
-        hasCompanyAccess(resource.data.companyId)
+        !('companyId' in resource.data) ||
+        isL0() ||
+        isL1Tenant(resource.data.companyId) ||
+        isL2Tenant(resource.data.companyId)
       );
       allow create: if isAuthenticated();
+      allow update, delete: if false;
     }
-    
-    // Users collection
-    // Permite leitura para usuários autenticados
-    // Permite escrita para master OU para usuários sem role configurado (dono inicial)
+
+    // =====================================================================
+    // USERS (coleção legada — manter comportamento atual)
+    // =====================================================================
+
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow write: if canManageUsers();
+      allow write: if isL0();
     }
-    
-    // Default deny for any other collection
+
+    // =====================================================================
+    // DEFAULT DENY
+    // =====================================================================
+
     match /{document=**} {
       allow read, write: if false;
     }
