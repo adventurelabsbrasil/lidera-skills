@@ -15,16 +15,17 @@ import { fetchCollection } from './services/firebase';
 import { ThemeToggle } from './components/ui/ThemeToggle';
 import { Toaster } from './components/ui/Toaster';
 
-import { 
-  CriteriaView, 
-  SectorsView, 
-  RolesView, 
-  EmployeesView, 
+import {
+  CriteriaView,
+  SectorsView,
+  RolesView,
+  EmployeesView,
   UsersView,
   CompaniesView,
   HistoryImportView, // <--- Importação da nova View
   GoalsView
 } from './components/settings/Registers';
+import { AccessLevelsView } from './components/admin/AccessLevelsView';
 
 import { 
   LayoutDashboard, 
@@ -44,6 +45,7 @@ import {
   Building,
   FileSpreadsheet,
   FileBarChart,
+  ShieldCheck,
   type LucideIcon
 } from 'lucide-react';
 
@@ -99,6 +101,8 @@ function DashboardWrapper() {
 function SettingsWrapper() {
   const { view } = useParams<{ view: string }>();
   const { isMaster } = useCompany();
+  const { isCompanyUser } = useAuth();
+  const canManageAccessLevels = isMaster || isCompanyUser;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -159,11 +163,16 @@ function SettingsWrapper() {
             <SettingsButton view="goals" icon={Target} label="Metas de Desempenho" />
           </div>
 
-          {isMaster && (
+          {(isMaster || canManageAccessLevels) && (
             <>
               <div className="my-4 border-t border-gray-100 dark:border-gray-800"></div>
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Admin</h3>
-              <SettingsButton view="companies" icon={Building} label="Empresas" />
+              {isMaster && (
+                <SettingsButton view="companies" icon={Building} label="Empresas" />
+              )}
+              {canManageAccessLevels && (
+                <SettingsButton view="access" icon={ShieldCheck} label="Níveis de Acesso" />
+              )}
             </>
           )}
         </div>
@@ -178,6 +187,7 @@ function SettingsWrapper() {
         {view === 'import' && <HistoryImportView />}
         {view === 'goals' && <GoalsView />}
         {isMaster && view === 'companies' && <CompaniesView />}
+        {canManageAccessLevels && view === 'access' && <AccessLevelsView />}
       </section>
     </div>
   );
@@ -351,8 +361,8 @@ function AppContent() {
     
     try {
       await signInWithEmail(email, password);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao fazer login. Verifique suas credenciais.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao fazer login. Verifique suas credenciais.');
     } finally {
       setIsLoading(false);
     }

@@ -3,8 +3,9 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, signInWithEmailA
 import { getFirestore, collection, getDocs, query, where, addDoc, doc, getDoc, setDoc, deleteDoc, limit, startAfter, QueryDocumentSnapshot, DocumentData, Query, orderBy } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Configuração do Firebase usando variáveis de ambiente
-const firebaseConfig = {
+// Configuração do Firebase usando variáveis de ambiente. Exportada para o
+// secondary auth app de criação de usuários (src/services/userManagement.ts).
+export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDjyKAT2aZ4A3OrqaM8a6E6c0ht12BT278",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "lidera-skills.firebaseapp.com",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "lidera-skills",
