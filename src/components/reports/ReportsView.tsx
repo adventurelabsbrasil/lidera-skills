@@ -3,8 +3,10 @@ import { ReportTypeSelector, REPORT_TYPES, type ReportType } from './ReportTypeS
 import { AdvancedReportFilters, DEFAULT_REPORT_FILTERS, type ReportFilters } from './AdvancedReportFilters';
 import { DataPreviewTable } from './DataPreviewTable';
 import { useCompany } from '../../contexts/CompanyContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { fetchCollection } from '../../services/firebase';
 import { useReportData } from '../../hooks/useReportData';
+import { filterBySector } from '../../lib/rbac';
 import {
   exportReportToCSV,
   exportReportToXLS,
@@ -19,6 +21,7 @@ import { Menu, X, FileText, FileSpreadsheet, FileDown, Loader2 } from 'lucide-re
 
 export const ReportsView: React.FC = () => {
   const { currentCompany } = useCompany();
+  const { level, allowedSectorNames } = useAuth();
   const [selectedReportType, setSelectedReportType] = useState<ReportType | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [filters, setFilters] = useState<ReportFilters>(DEFAULT_REPORT_FILTERS);
@@ -40,15 +43,28 @@ export const ReportsView: React.FC = () => {
           fetchCollection('roles', companyId),
           fetchCollection('employees', companyId),
         ]);
-        setUniqueSectors([...new Set((sectorsData as { name?: string }[]).map((s) => s.name).filter(Boolean))] as string[]);
+        // L3: limita as opções de filtro aos setores que ele lidera.
+        const scopedSectors =
+          level === 'L3' && allowedSectorNames
+            ? (sectorsData as { name?: string }[]).filter(
+                (s) => typeof s.name === 'string' && allowedSectorNames.includes(s.name)
+              )
+            : (sectorsData as { name?: string }[]);
+        const scopedEmployees = filterBySector(
+          employeesData as Record<string, unknown>[],
+          'sector',
+          level,
+          allowedSectorNames
+        ) as { name?: string }[];
+        setUniqueSectors([...new Set(scopedSectors.map((s) => s.name).filter(Boolean))] as string[]);
         setUniqueRoles([...new Set((rolesData as { name?: string }[]).map((r) => r.name).filter(Boolean))] as string[]);
-        setUniqueEmployees([...new Set((employeesData as { name?: string }[]).map((e) => e.name).filter(Boolean))] as string[]);
+        setUniqueEmployees([...new Set(scopedEmployees.map((e) => e.name).filter(Boolean))] as string[]);
       } catch (error) {
         console.error('Erro ao carregar opções de filtro:', error);
       }
     };
     loadFilterOptions();
-  }, [companyId, currentCompany?.id]);
+  }, [companyId, currentCompany?.id, level, allowedSectorNames]);
 
   const selectedOption = REPORT_TYPES.find((t) => t.id === selectedReportType);
   const selectedLabel = selectedOption?.label ?? 'Relatórios';

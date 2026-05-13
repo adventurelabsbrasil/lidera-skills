@@ -2,8 +2,9 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { auth, loginGoogle, loginEmailPassword, logout, getUserRole, type UserRole, type AccessLevel } from '../services/firebase';
+import { auth, loginGoogle, loginEmailPassword, logout, getUserRole, db, type UserRole, type AccessLevel } from '../services/firebase';
 import { effectiveLevel } from '../lib/rbac';
+import { collection, getDocs, query, where, documentId } from 'firebase/firestore';
 
 interface AuthContextType {
   user: User | null;
@@ -28,6 +29,13 @@ interface AuthContextType {
   level: AccessLevel | null;
   /** Setores que L3 tem permissão de ver. Vazio array pra demais níveis. */
   allowedSectorIds: string[];
+  /**
+   * Nomes dos setores em `allowedSectorIds`. Necessário porque employees e
+   * evaluations referenciam setor por nome textual (`sector: string`), não por
+   * ID. `null` indica "ainda carregando" — UIs devem aguardar; `[]` indica
+   * resolvido vazio (provavelmente IDs órfãos).
+   */
+  allowedSectorNames: string[] | null;
   /** ID da empresa permitida quando isCompanyUser é true; null caso contrário */
   allowedCompanyId: string | null;
   refreshUserRole: () => Promise<void>;
@@ -39,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const [allowedSectorNames, setAllowedSectorNames] = useState<string[] | null>(null);
 
   const loadUserRole = async (userId: string) => {
     try {
@@ -95,6 +104,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const level: AccessLevel | null = effectiveLevel(userRole, isLegacyInitialOwner);
   const allowedSectorIds: string[] =
     level === 'L3' ? userRole?.sectorIds ?? [] : [];
+
+  // Resolve nomes dos setores permitidos (L3 só): employees/evaluations
+  // referenciam setor por nome textual, então precisamos do array de nomes
+  // pra filtrar. Roda quando level/sectorIds mudam.
+  useEffect(() => {
+    if (level !== 'L3' || allowedSectorIds.length === 0) {
+      setAllowedSectorNames(level === 'L3' ? [] : null);
+      return;
+    }
+    let cancelled = false;
+    // `documentId() in [...]` aceita até 30 IDs. L3 com mais setores que isso é caso raro;
+    // se acontecer, partição em batches.
+    const ids = allowedSectorIds.slice(0, 30);
+    getDocs(query(collection(db, 'sectors'), where(documentId(), 'in', ids)))
+      .then((snap) => {
+        if (cancelled) return;
+        const names = snap.docs
+          .map((d) => (d.data() as { name?: string }).name)
+          .filter((n): n is string => typeof n === 'string');
+        setAllowedSectorNames(names);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('[Lidera] Falha ao resolver nomes de setores:', err);
+          setAllowedSectorNames([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Stringify ids pra evitar re-run quando o array é nova ref mas mesmos valores
+  }, [level, allowedSectorIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
   // Qualquer nível com tenant restrito (L1/L2/L3 novos OU role 'company' legado)
   // tem companyId permitido. Apenas L0 e legacy initial owner (sem doc) podem
   // ler todas as empresas via fetchCollection — os demais precisam usar
@@ -117,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLegacyInitialOwner,
       level,
       allowedSectorIds,
+      allowedSectorNames,
       allowedCompanyId,
       refreshUserRole
     }}>

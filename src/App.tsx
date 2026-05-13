@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CompanyProvider, useCompany } from './contexts/CompanyContext';
@@ -13,6 +13,7 @@ import { EmployeeProfile } from './components/employee/EmployeeProfile';
 import { ReportsView } from './components/reports/ReportsView';
 import { fetchCollection } from './services/firebase';
 import { sendPasswordReset } from './services/userManagement';
+import { filterBySector } from './lib/rbac';
 import { toast } from 'sonner';
 import { ThemeToggle } from './components/ui/ThemeToggle';
 import { Toaster } from './components/ui/Toaster';
@@ -79,6 +80,7 @@ function DashboardWrapper() {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const { currentCompany } = useCompany();
+  const { level, allowedSectorNames } = useAuth();
 
   useEffect(() => {
     const loadData = async () => {
@@ -86,8 +88,8 @@ function DashboardWrapper() {
       try {
         const companyFilter = currentCompany.id === 'all' ? null : currentCompany.id;
         const evaluationsData = await fetchCollection('evaluations', companyFilter);
-        const employeesData = await fetchCollection('employees'); 
-        
+        const employeesData = await fetchCollection('employees');
+
         setEvaluations(evaluationsData);
         setEmployees(employeesData);
       } catch (error) {
@@ -97,7 +99,18 @@ function DashboardWrapper() {
     loadData();
   }, [currentCompany]);
 
-  return <Dashboard evaluations={evaluations} employees={employees} initialTab={tab} />;
+  // L3: filtra evaluations/employees pelos setores que ele lidera. Para outros
+  // níveis o helper é no-op.
+  const visibleEvaluations = useMemo(
+    () => filterBySector(evaluations, 'sector', level, allowedSectorNames),
+    [evaluations, level, allowedSectorNames]
+  );
+  const visibleEmployees = useMemo(
+    () => filterBySector(employees, 'sector', level, allowedSectorNames),
+    [employees, level, allowedSectorNames]
+  );
+
+  return <Dashboard evaluations={visibleEvaluations} employees={visibleEmployees} initialTab={tab} />;
 }
 
 function SettingsWrapper() {

@@ -4,6 +4,8 @@ import { ChevronRight, ArrowLeft, Calendar, User, FileText, TrendingUp, Upload }
 import { fetchCollection } from '../../services/firebase';
 import { DataImporter } from '../settings/DataImporter';
 import { useCompany } from '../../contexts/CompanyContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { filterBySector } from '../../lib/rbac';
 import { formatShortName } from '../../utils/nameFormatter';
 import { formatDateOnlyPtBR, getDateOnlyTimestamp } from '../../utils/date';
 
@@ -31,10 +33,11 @@ interface Employee {
 
 export const EvaluationHistory = () => {
   const { currentCompany } = useCompany();
+  const { level, allowedSectorNames } = useAuth();
   const [viewLevel, setViewLevel] = useState<1 | 2 | 3>(1);
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
-  const [selectedEvaluation, setSelectedEvaluation] = useState<any | null>(null);
-  
+  const [selectedEvaluation, setSelectedEvaluation] = useState<Evaluation | null>(null);
+
   // Dados Brutos
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -48,15 +51,28 @@ export const EvaluationHistory = () => {
         // Avaliações são filtradas por empresa, funcionários são gerais
         const evs = await fetchCollection('evaluations', currentCompany.id);
         const emps = await fetchCollection('employees'); // Sem filtro de empresa
+        // L3: limita aos setores que o líder gerencia (no-op pros demais).
+        const scopedEvs = filterBySector(
+          evs as unknown as Record<string, unknown>[],
+          'sector',
+          level,
+          allowedSectorNames
+        ) as unknown as Evaluation[];
+        const scopedEmps = filterBySector(
+          emps as unknown as Record<string, unknown>[],
+          'sector',
+          level,
+          allowedSectorNames
+        ) as unknown as Employee[];
         // Histórico mostra TODOS os funcionários (ativos e inativos)
-        setEvaluations(evs as any[]);
-        setEmployees(emps as any[]);
+        setEvaluations(scopedEvs);
+        setEmployees(scopedEmps);
       } catch (error) {
         console.error("Erro ao carregar dados:", error);
       }
     };
     loadData();
-  }, [currentCompany]);
+  }, [currentCompany, level, allowedSectorNames]);
 
   // --- Processamento e Mesclagem de Dados ---
   const processedEvaluations = useMemo(() => {
@@ -312,7 +328,7 @@ export const EvaluationHistory = () => {
             <table className="w-full text-left">
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-[#1E1E1E]">
                 {selectedEvaluation.detalhes ? (
-                  Object.entries(selectedEvaluation.detalhes).map(([key, value]: any, index: number) => (
+                  Object.entries(selectedEvaluation.detalhes).map(([key, value], index: number) => (
                     <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                       <td className="p-4 text-gray-700 dark:text-gray-300">{key}</td>
                     <td className="p-4 text-right font-medium text-gray-800 dark:text-gray-200">
