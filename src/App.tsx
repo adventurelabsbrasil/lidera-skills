@@ -103,8 +103,10 @@ function DashboardWrapper() {
 function SettingsWrapper() {
   const { view } = useParams<{ view: string }>();
   const { isMaster } = useCompany();
-  const { isCompanyUser } = useAuth();
-  const canManageAccessLevels = isMaster || isCompanyUser;
+  const { isCompanyUser, isLegacyInitialOwner } = useAuth();
+  // Legacy initial owner (autenticado sem doc em user_roles) também é tratado
+  // como L0/master pelas firestore.rules — espelhar aqui pra a UI aparecer.
+  const canManageAccessLevels = isMaster || isCompanyUser || isLegacyInitialOwner;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
 

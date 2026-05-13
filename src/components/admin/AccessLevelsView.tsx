@@ -53,10 +53,13 @@ function effectiveLevel(role: UserRole | null): AccessLevel | null {
 }
 
 export const AccessLevelsView = () => {
-  const { user, userRole } = useAuth();
+  const { user, userRole, isLegacyInitialOwner } = useAuth();
   const { companies } = useCompany();
 
-  const myLevel = effectiveLevel(userRole);
+  // Legacy initial owner (sem doc em user_roles) é L0 efetivo pelas rules.
+  const myLevel: AccessLevel | null = isLegacyInitialOwner
+    ? "L0"
+    : effectiveLevel(userRole);
   const canManage = myLevel === "L0" || myLevel === "L1";
   const tenantFilter = myLevel === "L0" ? null : userRole?.companyId ?? null;
 

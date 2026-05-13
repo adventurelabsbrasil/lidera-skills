@@ -14,6 +14,12 @@ interface AuthContextType {
   isMaster: boolean;
   /** Usuário com role 'company': acesso apenas à empresa vinculada (avaliações e dados da empresa) */
   isCompanyUser: boolean;
+  /**
+   * Autenticado mas sem documento em `user_roles` — tratado como L0/master pelas
+   * firestore.rules ("legacy initial owner"). Necessário expor client-side pra
+   * que UIs administrativas apareçam pro dono inicial do projeto.
+   */
+  isLegacyInitialOwner: boolean;
   /** ID da empresa permitida quando isCompanyUser é true; null caso contrário */
   allowedCompanyId: string | null;
   refreshUserRole: () => Promise<void>;
@@ -76,18 +82,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isMaster = userRole?.role === 'master' || false;
   const isCompanyUser = userRole?.role === 'company' || false;
+  // Autenticado + sem doc em user_roles = legacy initial owner (rules tratam como L0)
+  const isLegacyInitialOwner = !!user && !loading && userRole === null;
   const allowedCompanyId = userRole?.role === 'company' && userRole?.companyId ? userRole.companyId : null;
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      userRole, 
-      loading, 
-      signIn, 
+    <AuthContext.Provider value={{
+      user,
+      userRole,
+      loading,
+      signIn,
       signInWithEmail,
       signOut: signOutUser,
       isMaster,
       isCompanyUser,
+      isLegacyInitialOwner,
       allowedCompanyId,
       refreshUserRole
     }}>
