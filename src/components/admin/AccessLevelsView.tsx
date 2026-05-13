@@ -5,10 +5,11 @@ import { Modal } from "../ui/Modal";
 import { useAuth } from "../../contexts/AuthContext";
 import { useCompany } from "../../contexts/CompanyContext";
 import {
-  fetchCollection,
+  db,
   type UserRole,
   type AccessLevel,
 } from "../../services/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import {
   createUserViaSecondaryApp,
   listUserRoles,
@@ -236,24 +237,48 @@ function CreateUserForm({
     isL0 ? companies[0]?.id ?? "" : creatorCompanyId ?? ""
   );
   const [sectors, setSectors] = useState<Sector[]>([]);
+  const [sectorsLoading, setSectorsLoading] = useState(false);
   const [selectedSectorIds, setSelectedSectorIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // Carrega setores do tenant selecionado (pra L3 escolher)
+  // Carrega setores do tenant. Setores podem estar em um de dois schemas:
+  // - Legado (SectorsView atual): `companyIds: string[]` (universal multi-tenant)
+  // - Novo (qualquer doc criado já tenant-specific): `companyId: string`
+  // Fazemos as duas queries e combinamos por id pra cobrir ambos durante migração.
   useEffect(() => {
     if (level !== "L3" || !companyId) {
       setSectors([]);
       setSelectedSectorIds([]);
+      setSectorsLoading(false);
       return;
     }
     let cancelled = false;
-    fetchCollection("sectors", companyId)
-      .then((list) => {
-        if (!cancelled) setSectors(list as Sector[]);
+    setSectorsLoading(true);
+    const col = collection(db, "sectors");
+    Promise.all([
+      getDocs(query(col, where("companyIds", "array-contains", companyId))),
+      getDocs(query(col, where("companyId", "==", companyId))),
+    ])
+      .then(([byArray, bySingular]) => {
+        if (cancelled) return;
+        const map: Record<string, Sector> = {};
+        for (const d of [...byArray.docs, ...bySingular.docs]) {
+          map[d.id] = { id: d.id, ...(d.data() as object) } as Sector;
+        }
+        const list = Object.values(map).sort((a, b) =>
+          (a.name ?? "").localeCompare(b.name ?? "")
+        );
+        setSectors(list);
       })
       .catch((err) => {
         if (!cancelled)
-          toast.error("Não foi possível carregar setores: " + err.message);
+          toast.error(
+            "Não foi possível carregar setores: " +
+              (err instanceof Error ? err.message : String(err))
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setSectorsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -370,10 +395,14 @@ function CreateUserForm({
           <label className="block text-sm font-medium mb-1 flex items-center gap-1">
             <Layers size={14} /> Setores que lidera
           </label>
-          {sectors.length === 0 ? (
-            <p className="text-sm text-gray-500">
-              Carregando setores do tenant…
-            </p>
+          {sectorsLoading ? (
+            <p className="text-sm text-gray-500">Carregando setores do tenant…</p>
+          ) : sectors.length === 0 ? (
+            <div className="text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+              Nenhum setor cadastrado para este tenant. Vá em{" "}
+              <strong>Configurações → Cadastros Gerais → Setores</strong> e
+              cadastre os setores antes de criar líderes (L3).
+            </div>
           ) : (
             <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2 space-y-1">
               {sectors.map((s) => (

@@ -131,62 +131,61 @@ service cloud.firestore {
     // =====================================================================
     // TENANT CONFIG (sectors, roles, evaluation_criteria)
     //
-    // FIX #3: docs precisam ter `companyId` para isolamento. Docs sem
-    // companyId são tratados como "universais" — leitura aberta, escrita L0.
+    // Dois schemas convivem durante migração:
+    //   - `companyId: string` (singular, novo) — doc pertence a 1 tenant.
+    //   - `companyIds: string[]` (plural, legado universal) — doc disponível
+    //     em múltiplos tenants. SectorsView/RolesView atuais usam esse.
+    // Docs sem nenhum dos dois = universais (qualquer auth lê; só L0 escreve).
+    //
+    // FIX #3: antes qualquer auth lia/escrevia em qualquer tenant. Agora há
+    // isolamento real — `canReadTenantConfig` / `canWriteTenantConfig`.
     // =====================================================================
 
+    function canReadTenantConfig(data) {
+      return isL0() ||
+        // Schema novo: companyId singular
+        ('companyId' in data && data.companyId != null &&
+          canReadTenant(data.companyId)) ||
+        // Schema legado: companyIds plural — user precisa ter companyId no array
+        ('companyIds' in data && hasUserRole() &&
+          userRole().companyId != null &&
+          userRole().companyId in data.companyIds) ||
+        // Universal: nem companyId nem companyIds → qualquer autenticado lê
+        (!('companyId' in data) && !('companyIds' in data));
+    }
+
+    function canWriteTenantConfig(data) {
+      return isL0() ||
+        // Schema novo: companyId singular
+        ('companyId' in data && data.companyId != null &&
+          canWriteTenant(data.companyId)) ||
+        // Schema legado: companyIds plural — só L1/L2 do tenant pode escrever
+        // se seu companyId estiver no array
+        ('companyIds' in data && hasUserRole() &&
+          userRole().companyId != null &&
+          userRole().companyId in data.companyIds &&
+          (userRole().level == 'L1' || userRole().level == 'L2' ||
+           userRole().role == 'company'));
+        // Universal sem nenhum dos campos: só L0 escreve — coberto pela
+        // primeira cláusula `isL0()`.
+    }
+
     match /sectors/{sectorId} {
-      allow read: if isAuthenticated() && (
-        !('companyId' in resource.data) ||
-        resource.data.companyId == null ||
-        canReadTenant(resource.data.companyId)
-      );
-      allow create: if isAuthenticated() && (
-        ('companyId' in request.resource.data) && request.resource.data.companyId != null
-          ? canWriteTenant(request.resource.data.companyId)
-          : isL0()
-      );
-      allow update, delete: if isAuthenticated() && (
-        ('companyId' in resource.data) && resource.data.companyId != null
-          ? canWriteTenant(resource.data.companyId)
-          : isL0()
-      );
+      allow read: if isAuthenticated() && canReadTenantConfig(resource.data);
+      allow create: if isAuthenticated() && canWriteTenantConfig(request.resource.data);
+      allow update, delete: if isAuthenticated() && canWriteTenantConfig(resource.data);
     }
 
     match /roles/{roleId} {
-      allow read: if isAuthenticated() && (
-        !('companyId' in resource.data) ||
-        resource.data.companyId == null ||
-        canReadTenant(resource.data.companyId)
-      );
-      allow create: if isAuthenticated() && (
-        ('companyId' in request.resource.data) && request.resource.data.companyId != null
-          ? canWriteTenant(request.resource.data.companyId)
-          : isL0()
-      );
-      allow update, delete: if isAuthenticated() && (
-        ('companyId' in resource.data) && resource.data.companyId != null
-          ? canWriteTenant(resource.data.companyId)
-          : isL0()
-      );
+      allow read: if isAuthenticated() && canReadTenantConfig(resource.data);
+      allow create: if isAuthenticated() && canWriteTenantConfig(request.resource.data);
+      allow update, delete: if isAuthenticated() && canWriteTenantConfig(resource.data);
     }
 
     match /evaluation_criteria/{criteriaId} {
-      allow read: if isAuthenticated() && (
-        !('companyId' in resource.data) ||
-        resource.data.companyId == null ||
-        canReadTenant(resource.data.companyId)
-      );
-      allow create: if isAuthenticated() && (
-        ('companyId' in request.resource.data) && request.resource.data.companyId != null
-          ? canWriteTenant(request.resource.data.companyId)
-          : isL0()
-      );
-      allow update, delete: if isAuthenticated() && (
-        ('companyId' in resource.data) && resource.data.companyId != null
-          ? canWriteTenant(resource.data.companyId)
-          : isL0()
-      );
+      allow read: if isAuthenticated() && canReadTenantConfig(resource.data);
+      allow create: if isAuthenticated() && canWriteTenantConfig(request.resource.data);
+      allow update, delete: if isAuthenticated() && canWriteTenantConfig(resource.data);
     }
 
     // =====================================================================
