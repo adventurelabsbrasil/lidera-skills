@@ -2,7 +2,8 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { auth, loginGoogle, loginEmailPassword, logout, getUserRole, type UserRole } from '../services/firebase';
+import { auth, loginGoogle, loginEmailPassword, logout, getUserRole, type UserRole, type AccessLevel } from '../services/firebase';
+import { effectiveLevel } from '../lib/rbac';
 
 interface AuthContextType {
   user: User | null;
@@ -20,6 +21,13 @@ interface AuthContextType {
    * que UIs administrativas apareçam pro dono inicial do projeto.
    */
   isLegacyInitialOwner: boolean;
+  /**
+   * Nível RBAC efetivo (resolvido de `level` novo, `role` legado ou
+   * legacy initial owner). `null` apenas durante loading inicial.
+   */
+  level: AccessLevel | null;
+  /** Setores que L3 tem permissão de ver. Vazio array pra demais níveis. */
+  allowedSectorIds: string[];
   /** ID da empresa permitida quando isCompanyUser é true; null caso contrário */
   allowedCompanyId: string | null;
   refreshUserRole: () => Promise<void>;
@@ -84,6 +92,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isCompanyUser = userRole?.role === 'company' || false;
   // Autenticado + sem doc em user_roles = legacy initial owner (rules tratam como L0)
   const isLegacyInitialOwner = !!user && !loading && userRole === null;
+  const level: AccessLevel | null = effectiveLevel(userRole, isLegacyInitialOwner);
+  const allowedSectorIds: string[] =
+    level === 'L3' ? userRole?.sectorIds ?? [] : [];
   const allowedCompanyId = userRole?.role === 'company' && userRole?.companyId ? userRole.companyId : null;
 
   return (
@@ -97,6 +108,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isMaster,
       isCompanyUser,
       isLegacyInitialOwner,
+      level,
+      allowedSectorIds,
       allowedCompanyId,
       refreshUserRole
     }}>

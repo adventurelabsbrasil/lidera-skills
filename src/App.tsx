@@ -102,11 +102,13 @@ function DashboardWrapper() {
 
 function SettingsWrapper() {
   const { view } = useParams<{ view: string }>();
-  const { isMaster } = useCompany();
-  const { isCompanyUser, isLegacyInitialOwner } = useAuth();
-  // Legacy initial owner (autenticado sem doc em user_roles) também é tratado
-  // como L0/master pelas firestore.rules — espelhar aqui pra a UI aparecer.
-  const canManageAccessLevels = isMaster || isCompanyUser || isLegacyInitialOwner;
+  const { level } = useAuth();
+  // Capabilities derivadas do nível efetivo (cobre legado + legacy initial owner).
+  const canSeeCadastros = level === 'L0' || level === 'L1' || level === 'L2';
+  const canSeePessoas = level === 'L0' || level === 'L1' || level === 'L2';
+  const canSeeDados = level === 'L0' || level === 'L1';
+  const canManageAccessLevels = level === 'L0' || level === 'L1';
+  const canSeeCompanies = level === 'L0'; // só Adventure/Lidera
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -144,34 +146,44 @@ function SettingsWrapper() {
       <aside className={`md:w-64 flex-shrink-0 ${isSidebarOpen ? 'block' : 'hidden md:block'}`}>
         <div className="bg-white dark:bg-lidera-gray rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-4 sticky top-24">
           
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Cadastros Gerais</h3>
-          <div className="space-y-1">
-            <SettingsButton view="criteria" icon={ClipboardList} label="Critérios" />
-            <SettingsButton view="sectors" icon={Layers} label="Setores" />
-            <SettingsButton view="roles" icon={Briefcase} label="Cargos" />
-          </div>
+          {canSeeCadastros && (
+            <>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Cadastros Gerais</h3>
+              <div className="space-y-1">
+                <SettingsButton view="criteria" icon={ClipboardList} label="Critérios" />
+                <SettingsButton view="sectors" icon={Layers} label="Setores" />
+                <SettingsButton view="roles" icon={Briefcase} label="Cargos" />
+              </div>
+              <div className="my-4 border-t border-gray-100 dark:border-gray-800"></div>
+            </>
+          )}
 
-          <div className="my-4 border-t border-gray-100 dark:border-gray-800"></div>
-          
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Pessoas</h3>
-          <div className="space-y-1">
-            <SettingsButton view="employees" icon={Users} label="Funcionários" />
-            <SettingsButton view="users" icon={UserCog} label="Usuários" />
-          </div>
+          {canSeePessoas && (
+            <>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Pessoas</h3>
+              <div className="space-y-1">
+                <SettingsButton view="employees" icon={Users} label="Funcionários" />
+                <SettingsButton view="users" icon={UserCog} label="Usuários" />
+              </div>
+              <div className="my-4 border-t border-gray-100 dark:border-gray-800"></div>
+            </>
+          )}
 
-          <div className="my-4 border-t border-gray-100 dark:border-gray-800"></div>
-          
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Dados</h3>
-          <div className="space-y-1">
-            <SettingsButton view="import" icon={FileSpreadsheet} label="Importar Histórico" />
-            <SettingsButton view="goals" icon={Target} label="Metas de Desempenho" />
-          </div>
+          {canSeeDados && (
+            <>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Dados</h3>
+              <div className="space-y-1">
+                <SettingsButton view="import" icon={FileSpreadsheet} label="Importar Histórico" />
+                <SettingsButton view="goals" icon={Target} label="Metas de Desempenho" />
+              </div>
+            </>
+          )}
 
-          {(isMaster || canManageAccessLevels) && (
+          {(canSeeCompanies || canManageAccessLevels) && (
             <>
               <div className="my-4 border-t border-gray-100 dark:border-gray-800"></div>
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Admin</h3>
-              {isMaster && (
+              {canSeeCompanies && (
                 <SettingsButton view="companies" icon={Building} label="Empresas" />
               )}
               {canManageAccessLevels && (
@@ -183,14 +195,14 @@ function SettingsWrapper() {
       </aside>
 
       <section className="flex-1 min-w-0">
-        {view === 'criteria' && <CriteriaView />}
-        {view === 'sectors' && <SectorsView />}
-        {view === 'roles' && <RolesView />}
-        {view === 'employees' && <EmployeesView />}
-        {view === 'users' && <UsersView />}
-        {view === 'import' && <HistoryImportView />}
-        {view === 'goals' && <GoalsView />}
-        {isMaster && view === 'companies' && <CompaniesView />}
+        {canSeeCadastros && view === 'criteria' && <CriteriaView />}
+        {canSeeCadastros && view === 'sectors' && <SectorsView />}
+        {canSeeCadastros && view === 'roles' && <RolesView />}
+        {canSeePessoas && view === 'employees' && <EmployeesView />}
+        {canSeePessoas && view === 'users' && <UsersView />}
+        {canSeeDados && view === 'import' && <HistoryImportView />}
+        {canSeeDados && view === 'goals' && <GoalsView />}
+        {canSeeCompanies && view === 'companies' && <CompaniesView />}
         {canManageAccessLevels && view === 'access' && <AccessLevelsView />}
       </section>
     </div>
@@ -199,7 +211,10 @@ function SettingsWrapper() {
 
 function MainApp() {
   const { currentCompany } = useCompany();
-  const { signOut } = useAuth();
+  const { signOut, level } = useAuth();
+  // L3 é read-only e não tem acesso a nenhum item de Configurações;
+  // esconder o tab do nav top evita confusão e ações barradas pelas rules.
+  const showSettingsNav = level !== 'L3';
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -297,7 +312,9 @@ function MainApp() {
               <NavButton view="evaluations" icon={FileCheck} label="Avaliações" />
               <NavButton view="history" icon={History} label="Histórico" />
               <NavButton view="reports" icon={FileBarChart} label="Relatórios" />
-              <NavButton view="settings" icon={Settings} label="Configurações" />
+              {showSettingsNav && (
+                <NavButton view="settings" icon={Settings} label="Configurações" />
+              )}
               <NavButton view="help" icon={HelpCircle} label="Ajuda" />
             </nav>
 

@@ -10,6 +10,7 @@ import {
   type AccessLevel,
 } from "../../services/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
+import { effectiveLevel } from "../../lib/rbac";
 import {
   createUserViaSecondaryApp,
   listUserRoles,
@@ -40,27 +41,11 @@ const LEVEL_BADGE: Record<AccessLevel, string> = {
   L3: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
 };
 
-/**
- * Deriva o nível de acesso efetivo do user_role legado/novo.
- * Janela de migração — quando F1.3 popular `level` em todos os docs,
- * o fallback baseado em `role` deixa de ser necessário.
- */
-function effectiveLevel(role: UserRole | null): AccessLevel | null {
-  if (!role) return null;
-  if (role.level) return role.level;
-  if (role.role === "master") return "L0";
-  if (role.role === "company") return "L1";
-  return null;
-}
-
 export const AccessLevelsView = () => {
-  const { user, userRole, isLegacyInitialOwner } = useAuth();
+  const { user, userRole, level } = useAuth();
   const { companies } = useCompany();
 
-  // Legacy initial owner (sem doc em user_roles) é L0 efetivo pelas rules.
-  const myLevel: AccessLevel | null = isLegacyInitialOwner
-    ? "L0"
-    : effectiveLevel(userRole);
+  const myLevel = level;
   const canManage = myLevel === "L0" || myLevel === "L1";
   const tenantFilter = myLevel === "L0" ? null : userRole?.companyId ?? null;
 
@@ -148,7 +133,8 @@ export const AccessLevelsView = () => {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {roles.map((r) => {
-                  const lvl = effectiveLevel(r);
+                  // Linhas listadas têm doc — isLegacyInitialOwner não se aplica.
+                  const lvl = effectiveLevel(r, false);
                   return (
                     <tr
                       key={r.id}
