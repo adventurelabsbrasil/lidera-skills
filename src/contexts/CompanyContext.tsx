@@ -44,12 +44,14 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     try {
       console.log('🔍 [Lidera] Carregando empresas. UID:', user?.uid, 'isCompanyUser:', isCompanyUser, 'allowedCompanyId:', allowedCompanyId);
       let data: Company[];
-      if (isCompanyUser && allowedCompanyId) {
-        // Usuário company: busca só o documento da empresa permitida (getDocs na coleção inteira dá permission-denied)
+      if (allowedCompanyId) {
+        // Tenant-restrito (L1/L2/L3 ou role 'company' legado): busca só o doc
+        // permitido — list em /companies sem filtro dá permission-denied pelas rules.
         const company = await getCompany(allowedCompanyId);
         data = company ? [{ id: company.id, name: company.name }] : [];
         console.log('✅ [Lidera] Company (única permitida):', data.length ? data[0] : 'nenhuma');
       } else {
+        // L0 ou legacy initial owner: lista todas.
         data = (await fetchCollection('companies')) as Company[];
         console.log('✅ [Lidera] Companies retornadas pelo Firestore:', data?.length, 'empresa(s)', data);
       }
@@ -74,15 +76,16 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     }
   }, [userIsMaster, user, authLoading, isCompanyUser, allowedCompanyId]);
 
-  // Usuário com role 'company': auto-seleciona a única empresa permitida
+  // Tenant-restrito (qualquer L1/L2/L3 ou role 'company'): auto-seleciona
+  // a única empresa permitida — não há escolha pra fazer.
   useEffect(() => {
-    if (loading || !isCompanyUser || !allowedCompanyId || companies.length === 0) return;
+    if (loading || !allowedCompanyId || companies.length === 0) return;
     const allowed = companies.find(c => c.id === allowedCompanyId);
     if (allowed && (!currentCompany || currentCompany.id !== allowedCompanyId)) {
       setCurrentCompanyState(allowed);
       localStorage.setItem('lidera_selected_company', JSON.stringify(allowed));
     }
-  }, [loading, isCompanyUser, allowedCompanyId, companies, currentCompany?.id]);
+  }, [loading, allowedCompanyId, companies, currentCompany?.id]);
 
   const setCompany = (company: Company | null) => {
     setCurrentCompanyState(company);
