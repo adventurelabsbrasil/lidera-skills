@@ -12,6 +12,8 @@ import { WelcomeView } from './components/welcome/WelcomeView';
 import { EmployeeProfile } from './components/employee/EmployeeProfile';
 import { ReportsView } from './components/reports/ReportsView';
 import { fetchCollection } from './services/firebase';
+import { sendPasswordReset } from './services/userManagement';
+import { toast } from 'sonner';
 import { ThemeToggle } from './components/ui/ThemeToggle';
 import { Toaster } from './components/ui/Toaster';
 
@@ -353,18 +355,38 @@ function AppContent() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+  const [resetSending, setResetSending] = useState(false);
+
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-    
+
     try {
       await signInWithEmail(email, password);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao fazer login. Verifique suas credenciais.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (resetSending) return;
+    const target = email.trim();
+    if (!target) {
+      toast.error('Digite seu email no campo acima antes de pedir o reset.');
+      return;
+    }
+    setResetSending(true);
+    try {
+      await sendPasswordReset(target);
+      toast.success(`Email com link para redefinir senha enviado para ${target}.`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error('Não foi possível enviar o email: ' + msg);
+    } finally {
+      setResetSending(false);
     }
   };
   
@@ -447,6 +469,17 @@ function AppContent() {
                   'Entrar'
                 )}
               </button>
+
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={handlePasswordReset}
+                  disabled={resetSending}
+                  className="text-sm text-gray-500 hover:text-yellow-600 dark:text-gray-400 dark:hover:text-yellow-400 underline disabled:opacity-50"
+                >
+                  {resetSending ? 'Enviando…' : 'Esqueci minha senha'}
+                </button>
+              </div>
             </form>
             
             {/* Divisor */}

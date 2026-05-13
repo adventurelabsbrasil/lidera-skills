@@ -18,6 +18,7 @@ import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import {
   getAuth,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signOut,
   type Auth,
 } from "firebase/auth";
@@ -32,6 +33,7 @@ import {
 import {
   firebaseConfig,
   db,
+  auth as primaryAuth,
   createAuditLog,
   type AccessLevel,
   type UserRole,
@@ -48,7 +50,14 @@ function getSecondaryAuth(): Auth {
 
 export interface CreateUserInput {
   email: string;
-  password: string;
+  /**
+   * Se omitido, o sistema gera uma senha aleatória interna e dispara email de
+   * password reset — o usuário define a senha real ao clicar no link. Modo
+   * recomendado: admin nunca toca em senha de outros usuários.
+   *
+   * Se passado, vira a senha inicial (admin precisa comunicar via canal externo).
+   */
+  password?: string;
   level: AccessLevel;
   /** Obrigatório para L1/L2/L3. Ignorado para L0. */
   companyId?: string | null;
@@ -64,6 +73,19 @@ export interface CreateUserInput {
 export interface CreateUserResult {
   uid: string;
   email: string;
+  /** True quando a senha foi gerada internamente e email de reset foi enviado. */
+  passwordResetEmailSent: boolean;
+}
+
+/**
+ * Gera senha aleatória forte (24 chars) usada temporariamente quando o admin
+ * opta pelo fluxo de invite por email. Não fica armazenada em lugar nenhum —
+ * o user vai redefinir via password reset email.
+ */
+function generateRandomPassword(): string {
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, "");
 }
 
 /**
@@ -88,11 +110,14 @@ export async function createUserViaSecondaryApp(
     throw new Error("sectorIds é obrigatório para L3 (≥1 setor).");
   }
 
+  const usingInviteFlow = !input.password;
+  const initialPassword = input.password ?? generateRandomPassword();
+
   const secondaryAuth = getSecondaryAuth();
   const cred = await createUserWithEmailAndPassword(
     secondaryAuth,
     input.email,
-    input.password
+    initialPassword
   );
   const uid = cred.user.uid;
 
@@ -101,6 +126,22 @@ export async function createUserViaSecondaryApp(
   // em user_roles pode ser reconciliado manualmente (ver
   // README_USUARIOS_E_PERMISSOES.md, Opção B).
   await signOut(secondaryAuth);
+
+  // Modo invite: dispara email de password reset usando o auth primário.
+  // Se falhar, o user ainda existe no Auth com a senha aleatória — admin
+  // pode reenviar via "Esqueci minha senha" na tela de login.
+  let passwordResetEmailSent = false;
+  if (usingInviteFlow) {
+    try {
+      await sendPasswordResetEmail(primaryAuth, input.email);
+      passwordResetEmailSent = true;
+    } catch (err) {
+      console.warn(
+        "[userManagement] Falha ao enviar password reset email:",
+        err
+      );
+    }
+  }
 
   const now = new Date().toISOString();
   const roleDoc: Omit<UserRole, "id"> = {
@@ -135,7 +176,15 @@ export async function createUserViaSecondaryApp(
     }
   );
 
-  return { uid, email: input.email };
+  return { uid, email: input.email, passwordResetEmailSent };
+}
+
+/**
+ * Envia email de password reset pro user. Usado tanto pelo "Esqueci minha
+ * senha" da tela de login quanto pelo invite flow de criação de usuário.
+ */
+export async function sendPasswordReset(email: string): Promise<void> {
+  await sendPasswordResetEmail(primaryAuth, email);
 }
 
 /**

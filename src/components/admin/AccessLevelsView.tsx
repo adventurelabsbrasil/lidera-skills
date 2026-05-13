@@ -228,7 +228,6 @@ function CreateUserForm({
     : ["L2", "L3"];
 
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [level, setLevel] = useState<AccessLevel>(availableLevels[0]);
   const [companyId, setCompanyId] = useState<string>(
     isL0 ? companies[0]?.id ?? "" : creatorCompanyId ?? ""
@@ -276,14 +275,18 @@ function CreateUserForm({
       const result = await createUserViaSecondaryApp(
         {
           email: email.trim(),
-          password,
+          // Sem password → invite flow (sistema gera + envia reset email)
           level,
           companyId: level === "L0" ? null : companyId,
           sectorIds: level === "L3" ? selectedSectorIds : undefined,
         },
         creatorUser
       );
-      toast.success(`Usuário criado: ${result.email}`);
+      toast.success(
+        result.passwordResetEmailSent
+          ? `Usuário criado: ${result.email} — email para definir senha enviado.`
+          : `Usuário criado: ${result.email}. Falha ao enviar email — usar "Esqueci minha senha" na tela de login.`
+      );
       onSuccess();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -305,21 +308,8 @@ function CreateUserForm({
           className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-800"
           placeholder="usuario@empresa.com.br"
         />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium mb-1">Senha</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={6}
-          className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-800"
-          placeholder="≥ 6 caracteres"
-        />
         <p className="text-xs text-gray-500 mt-1">
-          O usuário poderá alterar depois via "Esqueci minha senha".
+          O usuário receberá um email com link para definir a própria senha. Você não precisa digitar nenhuma senha.
         </p>
       </div>
 
