@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { fetchCollection } from '../services/firebase';
 import { useDashboardAnalytics } from './useDashboardAnalytics';
 import { usePerformanceGoals } from './usePerformanceGoals';
+import { useAuth } from '../contexts/AuthContext';
+import { filterBySector } from '../lib/rbac';
 import type { ReportType } from '../components/reports/ReportTypeSelector';
 import type { ReportFilters } from '../components/reports/AdvancedReportFilters';
 
@@ -42,6 +44,7 @@ export function useReportData({
   const [error, setError] = useState<string | null>(null);
 
   const { goalValue } = usePerformanceGoals();
+  const { level, allowedSectorNames } = useAuth();
 
   const loadData = async () => {
     if (!reportType) return;
@@ -57,13 +60,16 @@ export function useReportData({
           fetchCollection('evaluation_criteria'),
           fetchCollection('evaluations', companyId),
         ]);
+      // L3: limita employees/evaluations aos setores que o líder gerencia.
+      const empsTyped = employeesData as Record<string, unknown>[];
+      const evsTyped = evaluationsData as Record<string, unknown>[];
       setRawData({
         companies: companiesData as Record<string, unknown>[],
         sectors: sectorsData as Record<string, unknown>[],
         roles: rolesData as Record<string, unknown>[],
-        employees: employeesData as Record<string, unknown>[],
+        employees: filterBySector(empsTyped, 'sector', level, allowedSectorNames),
         criteria: criteriaData as Record<string, unknown>[],
-        evaluations: evaluationsData as Record<string, unknown>[],
+        evaluations: filterBySector(evsTyped, 'sector', level, allowedSectorNames),
       });
     } catch (err) {
       console.error('Erro ao carregar dados para relatório:', err);
@@ -83,7 +89,7 @@ export function useReportData({
 
   useEffect(() => {
     loadData();
-  }, [reportType, companyId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reportType, companyId, level, allowedSectorNames]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const analytics = useDashboardAnalytics(
     rawData.evaluations,

@@ -39,3 +39,29 @@ export function canWriteTenantConfig(level: AccessLevel | null): boolean {
 export function isReadOnlyLevel(level: AccessLevel | null): boolean {
   return level === "L3";
 }
+
+/**
+ * Filtra um array de itens por setor permitido. No-op para níveis que não são
+ * L3 ou enquanto os nomes ainda estão sendo resolvidos (`allowedSectorNames`
+ * é null). Quando vazio array, retorna [] (nada permitido).
+ *
+ * @param items Lista a filtrar (employees, evaluations, etc).
+ * @param sectorKey Propriedade que contém o nome do setor (ex: 'sector').
+ * @param level Nível efetivo do usuário corrente.
+ * @param allowedSectorNames Nomes resolvidos via AuthContext (`null` = loading).
+ */
+export function filterBySector<T extends Record<string, unknown>>(
+  items: T[],
+  sectorKey: keyof T,
+  level: AccessLevel | null,
+  allowedSectorNames: string[] | null
+): T[] {
+  if (level !== "L3") return items;
+  if (allowedSectorNames === null) return []; // ainda carregando — esconde
+  if (allowedSectorNames.length === 0) return [];
+  const set = new Set(allowedSectorNames);
+  return items.filter((item) => {
+    const sector = item[sectorKey];
+    return typeof sector === "string" && set.has(sector);
+  });
+}
