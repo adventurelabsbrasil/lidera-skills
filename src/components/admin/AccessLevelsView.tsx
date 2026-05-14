@@ -23,10 +23,50 @@ import { effectiveLevel } from "../../lib/rbac";
 import {
   createUserViaSecondaryApp,
   listUserRoles,
-  sendPasswordReset,
+  resendInvite,
   updateUserRole,
   setUserRoleDisabled,
 } from "../../services/userManagement";
+
+/**
+ * Janela após `inviteSentAt` em que consideramos o link de reset ainda válido.
+ * O Firebase Auth não documenta validade exata, mas observacionalmente é ~1h.
+ * Usamos 60min como aviso e oferta de reenvio.
+ */
+const INVITE_LINK_VALIDITY_MS = 60 * 60 * 1000;
+
+type AccessStatus = "ativo" | "convite_pendente" | "convite_expirado" | "desativado";
+
+function getAccessStatus(r: UserRole): AccessStatus {
+  if (r.disabled) return "desativado";
+  if (r.lastSignInAt) return "ativo";
+  if (!r.inviteSentAt) return "convite_pendente";
+  const sent = Date.parse(r.inviteSentAt);
+  if (Number.isNaN(sent)) return "convite_pendente";
+  return Date.now() - sent > INVITE_LINK_VALIDITY_MS
+    ? "convite_expirado"
+    : "convite_pendente";
+}
+
+function formatDateTime(iso?: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatDateTimeFull(iso?: string): string {
+  if (!iso) return "Nunca acessou";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Data inválida";
+  return d.toLocaleString("pt-BR");
+}
 
 interface Company {
   id: string;
@@ -99,11 +139,17 @@ export const AccessLevelsView = () => {
   );
 
   const handleResend = async (r: UserRole) => {
-    if (pendingUid) return;
+    if (pendingUid || !user) return;
     setPendingUid(r.id);
     try {
-      await sendPasswordReset(r.email);
-      toast.success(`Email para redefinir senha reenviado para ${r.email}.`);
+      await resendInvite(
+        { uid: r.id, email: r.email },
+        { uid: user.uid, email: user.email ?? "" }
+      );
+      toast.success(
+        `Email enviado para ${r.email}. O link de definição de senha vale ~1 hora.`
+      );
+      await loadRoles();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error("Falha ao reenviar email: " + msg);
@@ -224,9 +270,11 @@ export const AccessLevelsView = () => {
               <thead className="bg-gray-50 dark:bg-gray-900 text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Nível</th>
                   <th className="px-4 py-3">Empresa</th>
                   <th className="px-4 py-3">Setores</th>
+                  <th className="px-4 py-3">Último acesso</th>
                   <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
@@ -240,6 +288,10 @@ export const AccessLevelsView = () => {
                   );
                   const isPending = pendingUid === r.id;
                   const isDisabled = !!r.disabled;
+                  const status = getAccessStatus(r);
+                  const inviteExpired = status === "convite_expirado";
+                  const invitePending = status === "convite_pendente";
+                  const neverSignedIn = !r.lastSignInAt;
                   return (
                     <tr
                       key={r.id}
@@ -261,6 +313,45 @@ export const AccessLevelsView = () => {
                             {r.email}
                           </span>
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {status === "ativo" && (
+                          <span
+                            title={`Último acesso: ${formatDateTimeFull(r.lastSignInAt)}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                            Ativo
+                          </span>
+                        )}
+                        {status === "convite_pendente" && (
+                          <span
+                            title={
+                              r.inviteSentAt
+                                ? `Convite enviado em ${formatDateTimeFull(r.inviteSentAt)}. Link válido por ~1h.`
+                                : "Convite registrado, sem data de envio. Reenvie pra ter certeza."
+                            }
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            Convite enviado
+                          </span>
+                        )}
+                        {status === "convite_expirado" && (
+                          <span
+                            title={`Convite enviado em ${formatDateTimeFull(r.inviteSentAt)}. Link Firebase já passou da janela de ~1h — reenvie.`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            Link expirado
+                          </span>
+                        )}
+                        {status === "desativado" && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+                            Desativado
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {declaredLevel ? (
@@ -285,20 +376,50 @@ export const AccessLevelsView = () => {
                           ? `${r.sectorIds.length} setor(es)`
                           : "—"}
                       </td>
+                      <td
+                        className="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap"
+                        title={formatDateTimeFull(r.lastSignInAt)}
+                      >
+                        {neverSignedIn ? (
+                          <span className="italic text-gray-400">Nunca acessou</span>
+                        ) : (
+                          formatDateTime(r.lastSignInAt)
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => handleResend(r)}
-                            disabled={isPending || isDisabled}
-                            title={
-                              isDisabled
-                                ? "Reative o usuário antes de reenviar"
-                                : "Reenviar email para definir/redefinir senha"
-                            }
-                            className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            <Mail size={16} />
-                          </button>
+                          {inviteExpired && !isDisabled ? (
+                            <button
+                              onClick={() => handleResend(r)}
+                              disabled={isPending}
+                              title="O link Firebase expirou (~1h). Clique para enviar um novo email."
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Mail size={14} /> Reenviar
+                            </button>
+                          ) : invitePending && !isDisabled ? (
+                            <button
+                              onClick={() => handleResend(r)}
+                              disabled={isPending}
+                              title="Convite ainda dentro da janela de ~1h. Use só se o usuário não recebeu o email."
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:hover:bg-amber-900/40 dark:text-amber-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Mail size={14} /> Reenviar
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleResend(r)}
+                              disabled={isPending || isDisabled}
+                              title={
+                                isDisabled
+                                  ? "Reative o usuário antes de reenviar"
+                                  : "Enviar email para o usuário redefinir a senha (link válido por ~1h)"
+                              }
+                              className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <Mail size={16} />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleEdit(r)}
                             disabled={isPending}

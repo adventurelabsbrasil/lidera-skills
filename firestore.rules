@@ -109,6 +109,15 @@ service cloud.firestore {
              newData.level in ['L2', 'L3'];
     }
 
+    // Self-update apenas dos campos de telemetria de acesso (lastSignInAt +
+    // updatedAt). Permite o próprio usuário tocar a timestamp do último login
+    // sem precisar ser L0/L1. Qualquer outro campo bloqueia.
+    function isSelfTelemetryUpdate(userId) {
+      return request.auth.uid == userId &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['lastSignInAt', 'updatedAt']);
+    }
+
     match /user_roles/{userId} {
       allow read: if isAuthenticated() && (
         request.auth.uid == userId ||
@@ -123,7 +132,7 @@ service cloud.firestore {
         l1CanWriteUserRole(request.resource.data) &&
         // Não permite trocar o companyId do doc (defesa contra cross-tenant)
         resource.data.companyId == request.resource.data.companyId
-      );
+      ) || isSelfTelemetryUpdate(userId);
 
       allow delete: if isL0();
     }
