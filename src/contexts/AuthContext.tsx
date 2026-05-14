@@ -4,7 +4,24 @@ import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { auth, loginGoogle, loginEmailPassword, logout, getUserRole, db, type UserRole, type AccessLevel } from '../services/firebase';
 import { effectiveLevel } from '../lib/rbac';
-import { collection, getDocs, query, where, documentId } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, setDoc, where, documentId } from 'firebase/firestore';
+
+/**
+ * Atualiza `lastSignInAt` no doc do user_role em best-effort. Falha silenciosa —
+ * login não pode bloquear por causa de telemetria. Só toca o doc se já existir
+ * (legacy initial owner não tem doc; criar aqui mudaria semântica do RBAC).
+ */
+async function touchLastSignIn(uid: string) {
+  try {
+    const ref = doc(db, 'user_roles', uid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return;
+    const now = new Date().toISOString();
+    await setDoc(ref, { lastSignInAt: now, updatedAt: now }, { merge: true });
+  } catch (err) {
+    console.warn('[Lidera] Falha ao atualizar lastSignInAt (não-bloqueante):', err);
+  }
+}
 
 interface AuthContextType {
   user: User | null;
@@ -70,6 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(currentUser);
       if (currentUser) {
         await loadUserRole(currentUser.uid);
+        // Best-effort, não-bloqueante: registra que o usuário acessou agora.
+        // Cobre login email/senha, Google e auto-login persistente.
+        void touchLastSignIn(currentUser.uid);
       } else {
         setUserRole(null);
       }

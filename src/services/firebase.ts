@@ -230,6 +230,20 @@ export interface UserRole {
    * exige Admin SDK (Service Account JSON bloqueado por policy org).
    */
   disabled?: boolean;
+  /**
+   * ISO timestamp do último envio de email de convite/reset de senha. Usado
+   * na UI de Níveis de Acesso pra avisar quando o link Firebase pode ter
+   * expirado (validade ~1h). Atualizado por `createUserViaSecondaryApp` e
+   * `resendInvite`. Ausente em docs antigos.
+   */
+  inviteSentAt?: string;
+  /**
+   * ISO timestamp do último login bem-sucedido. Atualizado em best-effort no
+   * `AuthContext` após sign-in. Ausente significa "nunca acessou" (convite
+   * ainda não foi resgatado). UIs de Níveis de Acesso usam isso para
+   * distinguir usuário pendente de ativo.
+   */
+  lastSignInAt?: string;
   createdAt: string;
   updatedAt: string;
 }

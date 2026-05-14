@@ -151,6 +151,7 @@ export async function createUserViaSecondaryApp(
     level: input.level,
     companyId: input.level === "L0" ? undefined : input.companyId ?? undefined,
     sectorIds: input.level === "L3" ? input.sectorIds : undefined,
+    inviteSentAt: passwordResetEmailSent ? now : undefined,
     createdAt: now,
     updatedAt: now,
   };
@@ -180,11 +181,38 @@ export async function createUserViaSecondaryApp(
 }
 
 /**
- * Envia email de password reset pro user. Usado tanto pelo "Esqueci minha
- * senha" da tela de login quanto pelo invite flow de criação de usuário.
+ * Envia email de password reset pro user. Usado pelo "Esqueci minha senha"
+ * da tela de login (sem sessão admin nem uid conhecido).
  */
 export async function sendPasswordReset(email: string): Promise<void> {
   await sendPasswordResetEmail(primaryAuth, email);
+}
+
+/**
+ * Reenvia convite/reset pra um user_role específico e atualiza `inviteSentAt`
+ * no doc para que a UI mostre o link como "novinho" (~1h de validade).
+ * Usado pelo admin em Níveis de Acesso. Audit log é registrado.
+ */
+export async function resendInvite(
+  target: { uid: string; email: string },
+  triggeredBy: { uid: string; email: string }
+): Promise<void> {
+  await sendPasswordResetEmail(primaryAuth, target.email);
+  const now = new Date().toISOString();
+  await setDoc(
+    doc(db, "user_roles", target.uid),
+    { inviteSentAt: now, updatedAt: now },
+    { merge: true }
+  );
+  await createAuditLog(
+    triggeredBy.uid,
+    triggeredBy.email,
+    "update",
+    "user_role",
+    target.uid,
+    "(invite-resend)",
+    { entityName: target.email, metadata: { action: "resend_invite" } }
+  );
 }
 
 /**
