@@ -24,6 +24,18 @@ interface Evaluation {
   detalhes?: Record<string, number>;
 }
 
+// Evaluation enriquecida com campos derivados do merge com a coleção
+// `employees` (ver `processedEvaluations` mais abaixo). Esses campos só
+// existem em runtime depois do useMemo — usados pra exibir nome/setor
+// atualizados quando o cadastro oficial mudou.
+interface ProcessedEvaluation extends Evaluation {
+  displayName: string;
+  displayId: string;
+  displayRole: string;
+  displaySector: string;
+  normalizedScore: number;
+}
+
 interface Employee {
   id: string;
   name: string;
@@ -36,7 +48,7 @@ export const EvaluationHistory = () => {
   const { level, allowedSectorNames } = useAuth();
   const [viewLevel, setViewLevel] = useState<1 | 2 | 3>(1);
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
-  const [selectedEvaluation, setSelectedEvaluation] = useState<Evaluation | null>(null);
+  const [selectedEvaluation, setSelectedEvaluation] = useState<ProcessedEvaluation | null>(null);
 
   // Dados Brutos
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
