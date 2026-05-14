@@ -223,6 +223,13 @@ export interface UserRole {
   /** Para L3: IDs dos setores que o usuário lidera. Vazio/undefined nos demais níveis. */
   sectorIds?: string[];
   companyIds?: string[]; // Empresas que o usuário tem acesso (se aplicável, para outros roles)
+  /**
+   * Soft-delete. Quando true, o usuário não tem acesso efetivo (AuthContext
+   * retorna level=null e UIs bloqueiam) e fica oculto por padrão na lista
+   * de Níveis de Acesso. Hard-delete do Firebase Auth não é feito porque
+   * exige Admin SDK (Service Account JSON bloqueado por policy org).
+   */
+  disabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }
