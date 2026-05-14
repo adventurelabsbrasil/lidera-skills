@@ -45,7 +45,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       console.log('🔍 [Lidera] Carregando empresas. UID:', user?.uid, 'isCompanyUser:', isCompanyUser, 'allowedCompanyId:', allowedCompanyId);
       let data: Company[];
       if (allowedCompanyId) {
-        // Tenant-restrito (L1/L2/L3 ou role 'company' legado): busca só o doc
+        // Empresa-restrita (L1/L2/L3 ou role 'company' legado): busca só o doc
         // permitido — list em /companies sem filtro dá permission-denied pelas rules.
         const company = await getCompany(allowedCompanyId);
         data = company ? [{ id: company.id, name: company.name }] : [];
@@ -76,7 +76,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     }
   }, [userIsMaster, user, authLoading, isCompanyUser, allowedCompanyId]);
 
-  // Tenant-restrito (qualquer L1/L2/L3 ou role 'company'): auto-seleciona
+  // Empresa-restrita (qualquer L1/L2/L3 ou role 'company'): auto-seleciona
   // a única empresa permitida — não há escolha pra fazer.
   useEffect(() => {
     if (loading || !allowedCompanyId || companies.length === 0) return;

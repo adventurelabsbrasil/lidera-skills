@@ -41,7 +41,7 @@ interface Sector {
 
 const LEVEL_LABEL: Record<AccessLevel, string> = {
   L0: "L0 — Admin Adventure/Lidera",
-  L1: "L1 — Owner do tenant",
+  L1: "L1 — Owner da empresa",
   L2: "L2 — Gestor",
   L3: "L3 — Líder de setor",
 };
@@ -179,8 +179,8 @@ export const AccessLevelsView = () => {
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             {myLevel === "L0"
-              ? "Todos os tenants visíveis."
-              : `Tenant: ${
+              ? "Todas as empresas visíveis."
+              : `Empresa: ${
                   userRole?.companyId
                     ? companyById[userRole.companyId] ?? userRole.companyId
                     : "—"
@@ -225,7 +225,7 @@ export const AccessLevelsView = () => {
                 <tr>
                   <th className="px-4 py-3">Email</th>
                   <th className="px-4 py-3">Nível</th>
-                  <th className="px-4 py-3">Tenant</th>
+                  <th className="px-4 py-3">Empresa</th>
                   <th className="px-4 py-3">Setores</th>
                   <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
@@ -302,7 +302,7 @@ export const AccessLevelsView = () => {
                           <button
                             onClick={() => handleEdit(r)}
                             disabled={isPending}
-                            title="Editar nível, tenant ou setores"
+                            title="Editar nível, empresa ou setores"
                             className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 hover:text-amber-600 disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             <Pencil size={16} />
@@ -414,9 +414,9 @@ function UserForm({
   );
   const [submitting, setSubmitting] = useState(false);
 
-  // Carrega setores do tenant. Setores podem estar em um de dois schemas:
-  // - Legado (SectorsView atual): `companyIds: string[]` (universal multi-tenant)
-  // - Novo (qualquer doc criado já tenant-specific): `companyId: string`
+  // Carrega setores da empresa. Setores podem estar em um de dois schemas:
+  // - Legado (SectorsView atual): `companyIds: string[]` (universal multi-empresa)
+  // - Novo (qualquer doc criado já empresa-específico): `companyId: string`
   // Fazemos as duas queries e combinamos por id pra cobrir ambos durante migração.
   useEffect(() => {
     if (level !== "L3" || !companyId) {
@@ -463,7 +463,7 @@ function UserForm({
     if (submitting) return;
 
     if (level !== "L0" && !companyId) {
-      toast.error("Selecione o tenant.");
+      toast.error("Selecione a empresa.");
       return;
     }
     if (level === "L3" && selectedSectorIds.length === 0) {
@@ -552,7 +552,7 @@ function UserForm({
       {level !== "L0" && (
         <div>
           <label className="block text-sm font-medium mb-1 flex items-center gap-1">
-            <Building2 size={14} /> Tenant
+            <Building2 size={14} /> Empresa
           </label>
           {isL0 ? (
             <select
@@ -587,10 +587,10 @@ function UserForm({
             <Layers size={14} /> Setores que lidera
           </label>
           {sectorsLoading ? (
-            <p className="text-sm text-gray-500">Carregando setores do tenant…</p>
+            <p className="text-sm text-gray-500">Carregando setores da empresa…</p>
           ) : sectors.length === 0 ? (
             <div className="text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-              Nenhum setor cadastrado para este tenant. Vá em{" "}
+              Nenhum setor cadastrado para esta empresa. Vá em{" "}
               <strong>Configurações → Cadastros Gerais → Setores</strong> e
               cadastre os setores antes de criar líderes (L3).
             </div>
