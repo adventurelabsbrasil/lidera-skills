@@ -60,9 +60,10 @@ export const EvaluationHistory = () => {
     if (!currentCompany) return;
     const loadData = async () => {
       try {
-        // Avaliações são filtradas por empresa, funcionários são gerais
+        // Avaliações e funcionários filtrados por empresa. Sem filtro, rules
+        // multi-empresa abortam o list pra L1/L2/L3 → query inteira retorna 0.
         const evs = await fetchCollection('evaluations', currentCompany.id);
-        const emps = await fetchCollection('employees'); // Sem filtro de empresa
+        const emps = await fetchCollection('employees', currentCompany.id);
         // L3: limita aos setores que o líder gerencia (no-op pros demais).
         const scopedEvs = filterBySector(
           evs as unknown as Record<string, unknown>[],
