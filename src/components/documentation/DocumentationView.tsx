@@ -65,8 +65,8 @@ const DocumentationView = () => {
           id: 'sobre-sistema',
           title: 'O que é o Lidera Skills',
           content: [
-            'O Lidera Skills é uma plataforma SaaS multi-tenant desenvolvida para gestão e análise de avaliações de desempenho de colaboradores e líderes. O sistema permite que empresas gerenciem de forma completa o ciclo de avaliações, desde o cadastro de critérios até análises avançadas de desempenho.',
-            'Características principais: Multi-tenant com isolamento completo de dados, Sistema de roles com controle de acesso baseado em permissões, Interface moderna e responsiva com suporte a modo escuro/claro, Performance otimizada com paginação e scroll infinito, Importação em massa via CSV com mapeamento de colunas, Análises avançadas com dashboards interativos e gráficos em tempo real.'
+            'O Lidera Skills é uma plataforma SaaS multi-empresa desenvolvida para gestão e análise de avaliações de desempenho de colaboradores e líderes. O sistema permite que empresas gerenciem de forma completa o ciclo de avaliações, desde o cadastro de critérios até análises avançadas de desempenho.',
+            'Características principais: Multi-empresa com isolamento completo de dados, Sistema de roles com controle de acesso baseado em permissões, Interface moderna e responsiva com suporte a modo escuro/claro, Performance otimizada com paginação e scroll infinito, Importação em massa via CSV com mapeamento de colunas, Análises avançadas com dashboards interativos e gráficos em tempo real.'
           ]
         },
         {

@@ -136,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     // Stringify ids pra evitar re-run quando o array é nova ref mas mesmos valores
   }, [level, allowedSectorIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Qualquer nível com tenant restrito (L1/L2/L3 novos OU role 'company' legado)
+  // Qualquer nível com empresa restrita (L1/L2/L3 novos OU role 'company' legado)
   // tem companyId permitido. Apenas L0 e legacy initial owner (sem doc) podem
   // ler todas as empresas via fetchCollection — os demais precisam usar
   // getCompany(allowedCompanyId) para evitar permission-denied no list.

@@ -30,7 +30,7 @@ export function canManageUsers(level: AccessLevel | null): boolean {
   return level === "L0" || level === "L1";
 }
 
-/** L0/L1/L2 podem escrever em configurações do tenant (sectors, roles, etc). */
+/** L0/L1/L2 podem escrever em configurações da empresa (sectors, roles, etc). */
 export function canWriteTenantConfig(level: AccessLevel | null): boolean {
   return level === "L0" || level === "L1" || level === "L2";
 }

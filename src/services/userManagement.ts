@@ -188,8 +188,8 @@ export async function sendPasswordReset(email: string): Promise<void> {
 }
 
 /**
- * Lista user_roles. Se `companyIdFilter` for passado, retorna apenas docs do
- * tenant (usado por L1 pra ver sua equipe). Sem filtro retorna todos (L0).
+ * Lista user_roles. Se `companyIdFilter` for passado, retorna apenas docs da
+ * empresa (usado por L1 pra ver sua equipe). Sem filtro retorna todos (L0).
  *
  * As firestore.rules garantem que callers sem permissão recebem permission-denied
  * — esta função não tenta esconder; deixa o erro propagar.
@@ -214,8 +214,8 @@ export interface UpdateUserRoleInput {
 }
 
 /**
- * Atualiza um user_role existente. Rules garantem que apenas L0 ou L1 do
- * mesmo tenant podem editar. Email e userId não são editáveis aqui (mudar
+ * Atualiza um user_role existente. Rules garantem que apenas L0 ou L1 da
+ * mesma empresa podem editar. Email e userId não são editáveis aqui (mudar
  * email = nova conta, fluxo separado).
  */
 export async function updateUserRole(

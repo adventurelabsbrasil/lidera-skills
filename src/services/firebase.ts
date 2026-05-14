@@ -197,11 +197,11 @@ export const fetchCollectionPaginated = async (
 /**
  * Nível de acesso (RBAC). Campo separado de `role` (que descreve função do
  * usuário em avaliações — gestor/líder/colaborador). Os 4 níveis controlam
- * isolamento multi-tenant e granularidade de leitura/escrita no Firestore.
+ * isolamento multi-empresa e granularidade de leitura/escrita no Firestore.
  *
- * L0 — Dev/Admin Adventure+Lidera: vê todos os tenants, cria qualquer nível.
- * L1 — Owner do tenant: tudo dentro do tenant, cria L2/L3 do próprio tenant.
- * L2 — Gestor: tudo dentro do tenant, não cria usuários.
+ * L0 — Dev/Admin Adventure+Lidera: vê todas as empresas, cria qualquer nível.
+ * L1 — Owner da empresa: tudo dentro da empresa, cria L2/L3 da própria empresa.
+ * L2 — Gestor: tudo dentro da empresa, não cria usuários.
  * L3 — Líder de setor: só dados dos setores em `sectorIds`, não cria usuários.
  */
 export type AccessLevel = 'L0' | 'L1' | 'L2' | 'L3';
