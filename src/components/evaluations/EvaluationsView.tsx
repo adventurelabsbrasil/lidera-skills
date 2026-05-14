@@ -7,6 +7,8 @@ import {
 import { collection, addDoc, getDocs, query, where, writeBatch, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useCompany } from '../../contexts/CompanyContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { filterBySector } from '../../lib/rbac';
 import Papa from 'papaparse';
 import { Modal } from '../ui/Modal';
 import { toast } from '../../utils/toast';
@@ -48,11 +50,16 @@ interface EvaluationData {
   date: string;
   average: number;
   details: Record<string, number>;
+  // Campos opcionais armazenados em alguns docs antigos / fluxos paralelos
+  observations?: string;
+  funcionarioMes?: string | boolean;
+  highlightReason?: string;
 }
 
 // --- Subcomponente: Formulário de Avaliação (Mantido igual, apenas tipos ajustados) ---
 const EvaluationForm = ({ onSuccess }: { onSuccess: () => void }) => {
   const { currentCompany, companies } = useCompany();
+  const { level, allowedSectorNames } = useAuth();
   const { logAction } = useAuditLogger();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -139,18 +146,27 @@ const EvaluationForm = ({ onSuccess }: { onSuccess: () => void }) => {
             const status = emp.status || 'Ativo';
             return status !== 'Inativo';
           });
-          setEmployees(availableEmployees);
+          // L3: limita ao(s) setor(es) que o líder gerencia (no-op pros demais).
+          const scopedEmployees = filterBySector(
+            availableEmployees as unknown as Record<string, unknown>[],
+            'sector',
+            level,
+            allowedSectorNames
+          ) as unknown as Employee[];
+          setEmployees(scopedEmployees);
 
           const critSnap = await getDocs(collection(db, 'evaluation_criteria'));
-          const allCriteria = critSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+          const allCriteria = critSnap.docs.map(
+            d => ({ id: d.id, ...d.data() } as Record<string, unknown>)
+          );
 
-          const filteredCriteria = allCriteria.filter((crit: any) => {
-            const ids: string[] = crit.companyIds || [];
+          const filteredCriteria = allCriteria.filter((crit) => {
+            const ids = (crit.companyIds as string[] | undefined) ?? [];
             if (!ids || ids.length === 0) return true;
             return ids.includes(selectedCompanyId);
           });
 
-          setCriteriaList(filteredCriteria as Criteria[]);
+          setCriteriaList(filteredCriteria as unknown as Criteria[]);
         } else {
           setEmployees([]);
           setCriteriaList([]);
@@ -583,6 +599,7 @@ const EvaluationForm = ({ onSuccess }: { onSuccess: () => void }) => {
 // --- Subcomponente: Tabela de Avaliações com Edição em Massa ---
 const EvaluationsTable = () => {
   const { currentCompany } = useCompany();
+  const { level, allowedSectorNames } = useAuth();
   const [data, setData] = useState<EvaluationData[]>([]);
   const [filteredData, setFilteredData] = useState<EvaluationData[]>([]);
   const [filterName, setFilterName] = useState('');
@@ -641,9 +658,16 @@ const EvaluationsTable = () => {
       
       const snap = await getDocs(q);
       const raw = snap.docs.map(d => ({ id: d.id, ...d.data() } as EvaluationData));
-      raw.sort((a, b) => getDateOnlyTimestamp(b.date) - getDateOnlyTimestamp(a.date));
-      setData(raw);
-      setFilteredData(raw);
+      // L3: limita ao(s) setor(es) que o líder gerencia (no-op pros demais).
+      const scoped = filterBySector(
+        raw as unknown as Record<string, unknown>[],
+        'sector',
+        level,
+        allowedSectorNames
+      ) as unknown as EvaluationData[];
+      scoped.sort((a, b) => getDateOnlyTimestamp(b.date) - getDateOnlyTimestamp(a.date));
+      setData(scoped);
+      setFilteredData(scoped);
     } catch (err) {
       console.error('Erro ao carregar avaliações:', err);
       setData([]);
@@ -651,7 +675,7 @@ const EvaluationsTable = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentCompany]);
+  }, [currentCompany, level, allowedSectorNames]);
 
   useEffect(() => {
     loadData();
@@ -733,7 +757,7 @@ const EvaluationsTable = () => {
     
     const sorted = [...paginatedData];
     sorted.sort((a, b) => {
-      let aVal: any, bVal: any;
+      let aVal: string | number = '', bVal: string | number = '';
       
       switch (tableSort.field) {
         case 'date':
@@ -835,9 +859,9 @@ const EvaluationsTable = () => {
   const handleEdit = (ev: EvaluationData) => {
     setEditingEvaluation(ev);
     setEditScores(ev.details || {});
-    setEditObservations((ev as any).observations || '');
-    setEditIsHighlighted((ev as any).funcionarioMes === 'Sim' || (ev as any).funcionarioMes === true);
-    setEditHighlightReason((ev as any).highlightReason || '');
+    setEditObservations(ev.observations ?? '');
+    setEditIsHighlighted(ev.funcionarioMes === 'Sim' || ev.funcionarioMes === true);
+    setEditHighlightReason(ev.highlightReason ?? '');
   };
 
   const handleSaveEdit = async () => {
@@ -1510,24 +1534,24 @@ const EvaluationsTable = () => {
               </div>
             </div>
 
-            {(selectedEvaluation as any).observations && (
+            {selectedEvaluation.observations && (
               <div>
                 <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-2">Observações</h4>
                 <p className="text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-navy-900 p-3 rounded-lg">
-                  {(selectedEvaluation as any).observations}
+                  {selectedEvaluation.observations}
                 </p>
               </div>
             )}
 
-            {((selectedEvaluation as any).funcionarioMes === 'Sim' || (selectedEvaluation as any).funcionarioMes === true) && (
+            {(selectedEvaluation.funcionarioMes === 'Sim' || selectedEvaluation.funcionarioMes === true) && (
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Star size={20} className="text-yellow-600 dark:text-yellow-400 fill-yellow-600 dark:fill-yellow-400" />
                   <span className="font-bold text-gray-800 dark:text-white">Funcionário Destaque do Mês</span>
                 </div>
-                {(selectedEvaluation as any).highlightReason && (
+                {selectedEvaluation.highlightReason && (
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {(selectedEvaluation as any).highlightReason}
+                    {selectedEvaluation.highlightReason}
                   </p>
                 )}
               </div>
