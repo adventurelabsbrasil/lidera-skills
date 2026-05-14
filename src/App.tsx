@@ -86,7 +86,10 @@ function DashboardWrapper() {
       try {
         const companyFilter = currentCompany.id === 'all' ? null : currentCompany.id;
         const evaluationsData = await fetchCollection('evaluations', companyFilter);
-        const employeesData = await fetchCollection('employees');
+        // FIX: passa companyFilter pra employees também. Sem filtro, rules
+        // multi-empresa abortam o list pra L1/L2/L3 (rules barram employees
+        // de outras empresas → query inteira retorna 0).
+        const employeesData = await fetchCollection('employees', companyFilter);
 
         setEvaluations(evaluationsData);
         setEmployees(employeesData);
