@@ -207,3 +207,74 @@ export async function listUserRoles(
   );
 }
 
+export interface UpdateUserRoleInput {
+  level?: AccessLevel;
+  companyId?: string | null;
+  sectorIds?: string[];
+}
+
+/**
+ * Atualiza um user_role existente. Rules garantem que apenas L0 ou L1 do
+ * mesmo tenant podem editar. Email e userId não são editáveis aqui (mudar
+ * email = nova conta, fluxo separado).
+ */
+export async function updateUserRole(
+  uid: string,
+  patch: UpdateUserRoleInput,
+  editedBy: { uid: string; email: string }
+): Promise<void> {
+  const ref = doc(db, "user_roles", uid);
+  const update: Record<string, unknown> = {
+    updatedAt: new Date().toISOString(),
+  };
+  if (patch.level !== undefined) update.level = patch.level;
+  if (patch.companyId !== undefined) {
+    if (patch.companyId === null) update.companyId = null;
+    else update.companyId = patch.companyId;
+  }
+  if (patch.sectorIds !== undefined) update.sectorIds = patch.sectorIds;
+
+  await setDoc(ref, update, { merge: true });
+
+  await createAuditLog(
+    editedBy.uid,
+    editedBy.email,
+    "update",
+    "user_role",
+    uid,
+    (patch.companyId ?? "(unchanged)") as string,
+    { metadata: patch as Record<string, unknown> }
+  );
+}
+
+/**
+ * Soft-delete: marca o user_role como desativado. Auth user persiste (não
+ * conseguimos deletar sem Admin SDK por causa da policy org), mas o usuário
+ * fica sem acesso efetivo — `effectiveLevel` retorna null pra docs disabled
+ * e firestore.rules continuam permitindo apenas o que o doc declara.
+ *
+ * Para "reativar", chamar `setUserRoleDisabled(uid, false, ...)`.
+ */
+export async function setUserRoleDisabled(
+  uid: string,
+  disabled: boolean,
+  editedBy: { uid: string; email: string }
+): Promise<void> {
+  const ref = doc(db, "user_roles", uid);
+  await setDoc(
+    ref,
+    { disabled, updatedAt: new Date().toISOString() },
+    { merge: true }
+  );
+
+  await createAuditLog(
+    editedBy.uid,
+    editedBy.email,
+    disabled ? "delete" : "update",
+    "user_role",
+    uid,
+    "(soft)",
+    { metadata: { disabled } }
+  );
+}
+

@@ -22,7 +22,6 @@ import {
   SectorsView,
   RolesView,
   EmployeesView,
-  UsersView,
   CompaniesView,
   HistoryImportView, // <--- Importação da nova View
   GoalsView
@@ -38,7 +37,6 @@ import {
   Briefcase,
   Target, 
   Layers, 
-  UserCog,
   ClipboardList,
   Menu,
   X,
@@ -163,7 +161,6 @@ function SettingsWrapper() {
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Pessoas</h3>
               <div className="space-y-1">
                 <SettingsButton view="employees" icon={Users} label="Funcionários" />
-                <SettingsButton view="users" icon={UserCog} label="Usuários" />
               </div>
               <div className="my-4 border-t border-gray-100 dark:border-gray-800"></div>
             </>
@@ -199,7 +196,6 @@ function SettingsWrapper() {
         {canSeeCadastros && view === 'sectors' && <SectorsView />}
         {canSeeCadastros && view === 'roles' && <RolesView />}
         {canSeePessoas && view === 'employees' && <EmployeesView />}
-        {canSeePessoas && view === 'users' && <UsersView />}
         {canSeeDados && view === 'import' && <HistoryImportView />}
         {canSeeDados && view === 'goals' && <GoalsView />}
         {canSeeCompanies && view === 'companies' && <CompaniesView />}

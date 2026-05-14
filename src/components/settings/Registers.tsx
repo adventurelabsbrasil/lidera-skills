@@ -1,4 +1,14 @@
 import { GenericDatabaseView } from './GenericDatabaseView';
+
+type ColumnConfig = {
+  key: string;
+  label: string;
+  type?: 'text' | 'number' | 'date' | 'email' | 'select' | 'multi-select-companies' | 'image';
+  options?: string[];
+  linkedCollection?: string;
+  linkedField?: string;
+  hiddenInTable?: boolean;
+};
 import { DataImporter } from './DataImporter';
 import { useCompany } from '../../contexts/CompanyContext';
 import { FileSpreadsheet, AlertTriangle } from 'lucide-react';
@@ -15,7 +25,7 @@ const DISC_OPTIONS = [
 export const CriteriaView = () => {
   const { isMaster } = useCompany();
 
-  const columns: any[] = [
+  const columns: ColumnConfig[] = [
     { key: 'name', label: 'Competência / Pergunta' },
     { 
       key: 'type', 
@@ -57,7 +67,7 @@ export const CriteriaView = () => {
 export const SectorsView = () => {
   const { isMaster } = useCompany();
   
-  const columns: any[] = [
+  const columns: ColumnConfig[] = [
      { key: 'name', label: 'Nome do Setor' },
      { key: 'manager', label: 'Gerente Responsável' },
      { key: 'unit', label: 'Unidade/Filial' }
@@ -93,7 +103,7 @@ export const SectorsView = () => {
 export const RolesView = () => {
   const { isMaster } = useCompany();
 
-  const columns: any[] = [
+  const columns: ColumnConfig[] = [
       { key: 'name', label: 'Título do Cargo' },
       { 
         key: 'level', 
@@ -205,18 +215,11 @@ export const HistoryImportView = () => {
   );
 };
 
-// --- 6. Usuários ---
-export const UsersView = () => (
-  <GenericDatabaseView 
-    collectionName="users" 
-    title="Usuários com Acesso ao Sistema"
-    columns={[
-      { key: 'name', label: 'Nome' },
-      { key: 'email', label: 'Email', type: 'email' },
-      { key: 'role', label: 'Permissão', type: 'select', options: ['Admin', 'Gestor', 'Líder'] }
-    ]}
-  />
-);
+// --- 6. (Removido) Tela antiga Usuários ---
+// `UsersView` (collection `users` decorativa) foi removida em 2026-05-13.
+// Não criava Firebase Auth user, gerava confusão. Caminho canônico:
+// Configurações → Admin → Níveis de Acesso (src/components/admin/AccessLevelsView.tsx),
+// que usa Secondary Auth App + sendPasswordResetEmail + doc em `user_roles`.
 
 // --- 7. Gestão de Empresas ---
 export const CompaniesView = () => (

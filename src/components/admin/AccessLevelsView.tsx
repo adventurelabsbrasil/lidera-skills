@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { UserPlus, Shield, Building2, Layers } from "lucide-react";
+import {
+  UserPlus,
+  Shield,
+  Building2,
+  Layers,
+  Mail,
+  Pencil,
+  Ban,
+  RotateCcw,
+} from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { useAuth } from "../../contexts/AuthContext";
 import { useCompany } from "../../contexts/CompanyContext";
@@ -14,6 +23,9 @@ import { effectiveLevel } from "../../lib/rbac";
 import {
   createUserViaSecondaryApp,
   listUserRoles,
+  sendPasswordReset,
+  updateUserRole,
+  setUserRoleDisabled,
 } from "../../services/userManagement";
 
 interface Company {
@@ -52,6 +64,10 @@ export const AccessLevelsView = () => {
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingRole, setEditingRole] = useState<UserRole | null>(null);
+  const [showDisabled, setShowDisabled] = useState(false);
+  // uid em ação no momento (pra dar disabled em botões e evitar duplo-clique)
+  const [pendingUid, setPendingUid] = useState<string | null>(null);
 
   const loadRoles = useCallback(async () => {
     setLoading(true);
@@ -76,6 +92,72 @@ export const AccessLevelsView = () => {
     companies.forEach((c) => (map[c.id] = c.name));
     return map;
   }, [companies]);
+
+  const visibleRoles = useMemo(
+    () => roles.filter((r) => showDisabled || !r.disabled),
+    [roles, showDisabled]
+  );
+
+  const handleResend = async (r: UserRole) => {
+    if (pendingUid) return;
+    setPendingUid(r.id);
+    try {
+      await sendPasswordReset(r.email);
+      toast.success(`Email para redefinir senha reenviado para ${r.email}.`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error("Falha ao reenviar email: " + msg);
+    } finally {
+      setPendingUid(null);
+    }
+  };
+
+  const handleEdit = (r: UserRole) => {
+    setEditingRole(r);
+    setShowForm(true);
+  };
+
+  const handleDisable = async (r: UserRole) => {
+    if (pendingUid || !user) return;
+    if (
+      !window.confirm(
+        `Desativar ${r.email}? O usuário perderá acesso. (Você pode reativar depois.)`
+      )
+    )
+      return;
+    setPendingUid(r.id);
+    try {
+      await setUserRoleDisabled(r.id, true, {
+        uid: user.uid,
+        email: user.email ?? "",
+      });
+      toast.success(`${r.email} desativado.`);
+      await loadRoles();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error("Falha ao desativar: " + msg);
+    } finally {
+      setPendingUid(null);
+    }
+  };
+
+  const handleEnable = async (r: UserRole) => {
+    if (pendingUid || !user) return;
+    setPendingUid(r.id);
+    try {
+      await setUserRoleDisabled(r.id, false, {
+        uid: user.uid,
+        email: user.email ?? "",
+      });
+      toast.success(`${r.email} reativado.`);
+      await loadRoles();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error("Falha ao reativar: " + msg);
+    } finally {
+      setPendingUid(null);
+    }
+  };
 
   if (!user) return null;
 
@@ -105,20 +187,36 @@ export const AccessLevelsView = () => {
                 }`}
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="inline-flex items-center gap-2 bg-brand-gradient text-white dark:text-black font-semibold px-4 py-2 rounded-lg shadow-md hover:opacity-90 transition-opacity"
-        >
-          <UserPlus size={18} /> Novo usuário
-        </button>
+        <div className="flex items-center gap-3">
+          <label className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showDisabled}
+              onChange={(e) => setShowDisabled(e.target.checked)}
+              className="rounded"
+            />
+            Mostrar desativados
+          </label>
+          <button
+            onClick={() => {
+              setEditingRole(null);
+              setShowForm(true);
+            }}
+            className="inline-flex items-center gap-2 bg-brand-gradient text-white dark:text-black font-semibold px-4 py-2 rounded-lg shadow-md hover:opacity-90 transition-opacity"
+          >
+            <UserPlus size={18} /> Novo usuário
+          </button>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-lidera-gray rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-gray-500">Carregando…</div>
-        ) : roles.length === 0 ? (
+        ) : visibleRoles.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            Nenhum usuário encontrado neste escopo.
+            {roles.length === 0
+              ? "Nenhum usuário encontrado neste escopo."
+              : "Todos os usuários estão desativados. Marque \"Mostrar desativados\" pra ver."}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -129,26 +227,47 @@ export const AccessLevelsView = () => {
                   <th className="px-4 py-3">Nível</th>
                   <th className="px-4 py-3">Tenant</th>
                   <th className="px-4 py-3">Setores</th>
+                  <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {roles.map((r) => {
-                  // Linhas listadas têm doc — isLegacyInitialOwner não se aplica.
-                  const lvl = effectiveLevel(r, false);
+                {visibleRoles.map((r) => {
+                  // Nível "declarado" no doc, ignorando disabled — útil pra
+                  // mostrar mesmo em linhas desativadas.
+                  const declaredLevel: AccessLevel | null = effectiveLevel(
+                    { ...r, disabled: false },
+                    false
+                  );
+                  const isPending = pendingUid === r.id;
+                  const isDisabled = !!r.disabled;
                   return (
                     <tr
                       key={r.id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-900/50"
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-900/50 ${
+                        isDisabled ? "opacity-60" : ""
+                      }`}
                     >
                       <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">
-                        {r.email}
+                        <div className="flex items-center gap-2">
+                          {isDisabled && (
+                            <span
+                              title="Desativado"
+                              className="inline-block px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                            >
+                              OFF
+                            </span>
+                          )}
+                          <span className={isDisabled ? "line-through" : ""}>
+                            {r.email}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
-                        {lvl ? (
+                        {declaredLevel ? (
                           <span
-                            className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${LEVEL_BADGE[lvl]}`}
+                            className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${LEVEL_BADGE[declaredLevel]}`}
                           >
-                            {lvl}
+                            {declaredLevel}
                           </span>
                         ) : (
                           <span className="text-gray-400">
@@ -166,6 +285,49 @@ export const AccessLevelsView = () => {
                           ? `${r.sectorIds.length} setor(es)`
                           : "—"}
                       </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleResend(r)}
+                            disabled={isPending || isDisabled}
+                            title={
+                              isDisabled
+                                ? "Reative o usuário antes de reenviar"
+                                : "Reenviar email para definir/redefinir senha"
+                            }
+                            className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <Mail size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleEdit(r)}
+                            disabled={isPending}
+                            title="Editar nível, tenant ou setores"
+                            className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 hover:text-amber-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          {isDisabled ? (
+                            <button
+                              onClick={() => handleEnable(r)}
+                              disabled={isPending}
+                              title="Reativar usuário"
+                              className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 hover:text-green-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <RotateCcw size={16} />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleDisable(r)}
+                              disabled={isPending}
+                              title="Desativar usuário (pode reativar depois)"
+                              className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <Ban size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -177,16 +339,21 @@ export const AccessLevelsView = () => {
 
       <Modal
         isOpen={showForm}
-        onClose={() => setShowForm(false)}
-        title="Novo usuário"
+        onClose={() => {
+          setShowForm(false);
+          setEditingRole(null);
+        }}
+        title={editingRole ? `Editar ${editingRole.email}` : "Novo usuário"}
       >
-        <CreateUserForm
+        <UserForm
+          editingRole={editingRole}
           creatorLevel={myLevel}
           creatorCompanyId={userRole?.companyId ?? null}
           creatorUser={{ uid: user.uid, email: user.email ?? "" }}
           companies={companies}
           onSuccess={() => {
             setShowForm(false);
+            setEditingRole(null);
             loadRoles();
           }}
         />
@@ -195,7 +362,10 @@ export const AccessLevelsView = () => {
   );
 };
 
-interface CreateUserFormProps {
+interface UserFormProps {
+  /** Quando passado, o form opera em modo "editar" — email vira read-only e
+   *  o submit chama updateUserRole em vez de createUserViaSecondaryApp. */
+  editingRole: UserRole | null;
   creatorLevel: AccessLevel | null;
   creatorCompanyId: string | null;
   creatorUser: { uid: string; email: string };
@@ -203,28 +373,45 @@ interface CreateUserFormProps {
   onSuccess: () => void;
 }
 
-function CreateUserForm({
+function UserForm({
+  editingRole,
   creatorLevel,
   creatorCompanyId,
   creatorUser,
   companies,
   onSuccess,
-}: CreateUserFormProps) {
+}: UserFormProps) {
   const isL0 = creatorLevel === "L0";
+  const isEditing = editingRole !== null;
 
-  // Níveis permitidos: L0 cria qualquer; L1 cria L2/L3.
+  // Níveis permitidos: L0 cria/edita qualquer; L1 cria/edita L2/L3.
   const availableLevels: AccessLevel[] = isL0
     ? ["L0", "L1", "L2", "L3"]
     : ["L2", "L3"];
 
-  const [email, setEmail] = useState("");
-  const [level, setLevel] = useState<AccessLevel>(availableLevels[0]);
+  // Nível inicial: se editando, usa o existente; senão primeiro permitido.
+  const editingInitialLevel: AccessLevel | null = editingRole
+    ? editingRole.level ??
+      (editingRole.role === "master"
+        ? "L0"
+        : editingRole.role === "company"
+        ? "L1"
+        : null)
+    : null;
+
+  const [email, setEmail] = useState(editingRole?.email ?? "");
+  const [level, setLevel] = useState<AccessLevel>(
+    editingInitialLevel ?? availableLevels[0]
+  );
   const [companyId, setCompanyId] = useState<string>(
-    isL0 ? companies[0]?.id ?? "" : creatorCompanyId ?? ""
+    editingRole?.companyId ??
+      (isL0 ? companies[0]?.id ?? "" : creatorCompanyId ?? "")
   );
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [sectorsLoading, setSectorsLoading] = useState(false);
-  const [selectedSectorIds, setSelectedSectorIds] = useState<string[]>([]);
+  const [selectedSectorIds, setSelectedSectorIds] = useState<string[]>(
+    editingRole?.sectorIds ?? []
+  );
   const [submitting, setSubmitting] = useState(false);
 
   // Carrega setores do tenant. Setores podem estar em um de dois schemas:
@@ -286,25 +473,40 @@ function CreateUserForm({
 
     setSubmitting(true);
     try {
-      const result = await createUserViaSecondaryApp(
-        {
-          email: email.trim(),
-          // Sem password → invite flow (sistema gera + envia reset email)
-          level,
-          companyId: level === "L0" ? null : companyId,
-          sectorIds: level === "L3" ? selectedSectorIds : undefined,
-        },
-        creatorUser
-      );
-      toast.success(
-        result.passwordResetEmailSent
-          ? `Usuário criado: ${result.email} — email para definir senha enviado.`
-          : `Usuário criado: ${result.email}. Falha ao enviar email — usar "Esqueci minha senha" na tela de login.`
-      );
+      if (isEditing && editingRole) {
+        await updateUserRole(
+          editingRole.id,
+          {
+            level,
+            companyId: level === "L0" ? null : companyId,
+            sectorIds: level === "L3" ? selectedSectorIds : [],
+          },
+          creatorUser
+        );
+        toast.success(`Usuário ${editingRole.email} atualizado.`);
+      } else {
+        const result = await createUserViaSecondaryApp(
+          {
+            email: email.trim(),
+            // Sem password → invite flow (sistema gera + envia reset email)
+            level,
+            companyId: level === "L0" ? null : companyId,
+            sectorIds: level === "L3" ? selectedSectorIds : undefined,
+          },
+          creatorUser
+        );
+        toast.success(
+          result.passwordResetEmailSent
+            ? `Usuário criado: ${result.email} — email para definir senha enviado.`
+            : `Usuário criado: ${result.email}. Falha ao enviar email — usar "Esqueci minha senha" na tela de login.`
+        );
+      }
       onSuccess();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error("Falha ao criar usuário: " + msg);
+      toast.error(
+        (isEditing ? "Falha ao atualizar usuário: " : "Falha ao criar usuário: ") + msg
+      );
     } finally {
       setSubmitting(false);
     }
@@ -319,11 +521,14 @@ function CreateUserForm({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-800"
+          disabled={isEditing}
+          className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-800 disabled:bg-gray-100 dark:disabled:bg-gray-900 disabled:text-gray-500"
           placeholder="usuario@empresa.com.br"
         />
         <p className="text-xs text-gray-500 mt-1">
-          O usuário receberá um email com link para definir a própria senha. Você não precisa digitar nenhuma senha.
+          {isEditing
+            ? "Email não pode ser alterado. Para outro email, desative este e crie um novo."
+            : "O usuário receberá um email com link para definir a própria senha. Você não precisa digitar nenhuma senha."}
         </p>
       </div>
 
@@ -421,7 +626,13 @@ function CreateUserForm({
           disabled={submitting}
           className="bg-brand-gradient text-white dark:text-black font-semibold px-4 py-2 rounded-lg shadow-md hover:opacity-90 disabled:opacity-50"
         >
-          {submitting ? "Criando…" : "Criar usuário"}
+          {submitting
+            ? isEditing
+              ? "Salvando…"
+              : "Criando…"
+            : isEditing
+            ? "Salvar alterações"
+            : "Criar usuário"}
         </button>
       </div>
     </form>

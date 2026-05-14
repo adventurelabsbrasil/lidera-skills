@@ -15,6 +15,8 @@ export function effectiveLevel(
   role: UserRole | null,
   isLegacyInitialOwner: boolean
 ): AccessLevel | null {
+  // Soft-deleted = sem acesso (mesmo que role/level estejam setados)
+  if (role?.disabled) return null;
   if (isLegacyInitialOwner) return "L0";
   if (!role) return null;
   if (role.level) return role.level;
