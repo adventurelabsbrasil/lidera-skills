@@ -223,30 +223,32 @@ const EvaluationForm = ({ onSuccess }: { onSuccess: () => void }) => {
     return criteriaList.filter(c => c.type === formType);
   }, [formType, criteriaList]);
 
-  // Filtrar e ordenar funcionários (mostra todos, mas marca os já avaliados)
+  // Filtrar e ordenar funcionários (mostra todos, mas marca os já avaliados).
+  // Defensivo contra docs do Firestore com `name`/`role`/`sector` faltando —
+  // qualquer undefined nesses campos quebra `localeCompare`/`toLowerCase` e
+  // derruba a tela inteira via unhandled useMemo (caso real 15/05/2026).
   const availableEmployees = useMemo(() => {
-    let filtered = [...employees]; // Mostra todos os funcionários
-    
-    // Busca por nome
+    let filtered = [...employees];
+
     if (searchTerm) {
-      filtered = filtered.filter(emp => 
-        emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        emp.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        emp.sector.toLowerCase().includes(searchTerm.toLowerCase())
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(emp =>
+        (emp.name ?? '').toLowerCase().includes(term) ||
+        (emp.role ?? '').toLowerCase().includes(term) ||
+        (emp.sector ?? '').toLowerCase().includes(term)
       );
     }
-    
-    // Ordenação
+
     if (sortOrder === 'name') {
-      filtered.sort((a, b) => a.name.localeCompare(b.name));
+      filtered.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
     } else if (sortOrder === 'sector') {
       filtered.sort((a, b) => {
-        const sectorCompare = a.sector.localeCompare(b.sector);
+        const sectorCompare = (a.sector ?? '').localeCompare(b.sector ?? '');
         if (sectorCompare !== 0) return sectorCompare;
-        return a.name.localeCompare(b.name);
+        return (a.name ?? '').localeCompare(b.name ?? '');
       });
     }
-    
+
     return filtered;
   }, [employees, searchTerm, sortOrder]);
   
