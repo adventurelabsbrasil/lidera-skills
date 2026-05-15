@@ -22,6 +22,7 @@ interface Employee {
   name: string;
   role: string;
   sector: string;
+  sectorId?: string;
   companyId: string;
   status?: string;
   jobLevel?: string;
@@ -64,6 +65,9 @@ const EvaluationForm = ({ onSuccess }: { onSuccess: () => void }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [criteriaList, setCriteriaList] = useState<Criteria[]>([]);
+  // Map nome→id de setores do tenant, usado pra resolver `sectorId` na hora
+  // de gravar a avaliação quando o doc do funcionário não tem o campo.
+  const [sectorIdByName, setSectorIdByName] = useState<Record<string, string>>({});
   
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(null);
@@ -137,9 +141,26 @@ const EvaluationForm = ({ onSuccess }: { onSuccess: () => void }) => {
         setRoles(roleSnap.docs.map(d => ({ id: d.id, ...d.data() } as Role)));
         
         if (selectedCompanyId) {
+          // Carrega setores do tenant pra resolver sectorId por nome quando
+          // o doc de employee não traz o campo (L3 precisa de sectorId no
+          // payload pra passar na regra Firestore que confere user_roles.sectorIds).
+          const sectorsSnap = await getDocs(collection(db, 'sectors'));
+          const sectorMap: Record<string, string> = {};
+          sectorsSnap.docs.forEach((d) => {
+            const data = d.data() as { name?: string; companyId?: string; companyIds?: string[] };
+            const belongs =
+              data.companyId === selectedCompanyId ||
+              (Array.isArray(data.companyIds) && data.companyIds.includes(selectedCompanyId)) ||
+              (data.companyId == null && !Array.isArray(data.companyIds));
+            if (belongs && typeof data.name === 'string') {
+              sectorMap[data.name] = d.id;
+            }
+          });
+          setSectorIdByName(sectorMap);
+
           const empQuery = query(collection(db, 'employees'), where("companyId", "==", selectedCompanyId));
           const empSnap = await getDocs(empQuery);
-          
+
           const allEmployees = empSnap.docs.map(d => ({ id: d.id, ...d.data() } as Employee));
           // Filtrar: mostrar apenas Ativos, Férias e Afastados (não mostrar Inativos)
           const availableEmployees = allEmployees.filter(emp => {
@@ -259,9 +280,15 @@ const EvaluationForm = ({ onSuccess }: { onSuccess: () => void }) => {
       if(!window.confirm("Alguns critérios estão sem nota (serão considerados 0). Deseja continuar?")) return;
     }
 
+    // Denormaliza sectorId no payload: prioriza o que vier no doc do employee,
+    // cai pro lookup name→id do tenant. Necessário pras regras Firestore
+    // autorizarem L3 a gravar avaliações do próprio setor.
+    const resolvedSectorId =
+      currentEmployee.sectorId ?? sectorIdByName[currentEmployee.sector] ?? null;
+
     setLoading(true);
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         companyId: selectedCompanyId,
         employeeId: currentEmployee.id,
         employeeName: currentEmployee.name,
@@ -276,6 +303,9 @@ const EvaluationForm = ({ onSuccess }: { onSuccess: () => void }) => {
         highlightReason: isHighlighted ? highlightReason.trim() : '',
         createdAt: new Date().toISOString()
       };
+      if (resolvedSectorId) {
+        payload.sectorId = resolvedSectorId;
+      }
 
       const docRef = await addDoc(collection(db, 'evaluations'), payload);
       toast.success("Avaliação salva com sucesso!");

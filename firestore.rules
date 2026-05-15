@@ -201,9 +201,21 @@ service cloud.firestore {
     // EMPLOYEES, EVALUATIONS, GOALS
     //
     // Read: L0/L1/L2/L3 do tenant (UI filtra por setor para L3).
-    // Write: L0/L1/L2 do tenant. L3 read-only no MVP — quando evaluations
-    // ganhar `sectorId` denormalizado, libera L3 escrever só no próprio setor.
+    // Write em employees/goals: L0/L1/L2 do tenant.
+    // Write em evaluations: L0/L1/L2 do tenant OU L3 do tenant cuja
+    // avaliação carregue `sectorId` ∈ `user_roles.sectorIds`. Avaliações
+    // legadas sem `sectorId` permanecem read-only pra L3 — exige backfill
+    // pra liberar update/delete em docs antigos.
     // =====================================================================
+
+    function isL3WithinSector(data) {
+      return hasUserRole() &&
+             userRole().level == 'L3' &&
+             'companyId' in data && data.companyId == userRole().companyId &&
+             'sectorId' in data && data.sectorId != null &&
+             userRole().sectorIds is list &&
+             data.sectorId in userRole().sectorIds;
+    }
 
     match /employees/{employeeId} {
       allow read: if isAuthenticated() && (
@@ -227,11 +239,13 @@ service cloud.firestore {
       );
       allow create: if isAuthenticated() && (
         !('companyId' in request.resource.data) ||
-        canWriteTenant(request.resource.data.companyId)
+        canWriteTenant(request.resource.data.companyId) ||
+        isL3WithinSector(request.resource.data)
       );
       allow update, delete: if isAuthenticated() && (
         !('companyId' in resource.data) ||
-        canWriteTenant(resource.data.companyId)
+        canWriteTenant(resource.data.companyId) ||
+        isL3WithinSector(resource.data)
       );
     }
 
