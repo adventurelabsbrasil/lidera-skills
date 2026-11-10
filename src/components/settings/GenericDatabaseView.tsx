@@ -10,6 +10,7 @@ import { ErrorHandler } from '../../utils/errorHandler';
 import { usePagination } from '../../hooks/usePagination';
 import { fetchCollectionPaginated } from '../../services/firebase';
 import { formatShortName } from '../../utils/nameFormatter';
+import { loadSectorIdByName } from '../../utils/sectorResolver';
 import { useAuditLogger } from '../../utils/auditLogger';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -149,6 +150,14 @@ export const GenericDatabaseView = ({ collectionName, title, columns, modalColum
 
       if (!isUniversalCollection && !itemToSave.companyId && currentCompany && currentCompany.id !== 'all') {
          itemToSave.companyId = currentCompany.id;
+      }
+
+      // O select de setor só troca o nome; o sectorId (usado pelas regras do L3)
+      // precisa acompanhar, senão fica apontando pro setor antigo.
+      if (collectionName === 'employees' && itemToSave.sector && itemToSave.companyId) {
+        const sectorIdByName = await loadSectorIdByName(itemToSave.companyId);
+        const sectorId = sectorIdByName[itemToSave.sector];
+        if (sectorId) itemToSave.sectorId = sectorId;
       }
 
       // Verificação de duplicatas para setores, cargos e critérios (apenas ao criar, não ao editar)
