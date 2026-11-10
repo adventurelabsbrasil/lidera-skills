@@ -14,6 +14,7 @@ import { Modal } from '../ui/Modal';
 import { toast } from '../../utils/toast';
 import { useAuditLogger } from '../../utils/auditLogger';
 import { formatShortName } from '../../utils/nameFormatter';
+import { loadSectorIdByName } from '../../utils/sectorResolver';
 import { getMonthKey, getYearFromDateStr, formatDateOnlyPtBR, getDateOnlyTimestamp } from '../../utils/date';
 
 // --- Interfaces para Tipagem ---
@@ -144,18 +145,7 @@ const EvaluationForm = ({ onSuccess }: { onSuccess: () => void }) => {
           // Carrega setores do tenant pra resolver sectorId por nome quando
           // o doc de employee não traz o campo (L3 precisa de sectorId no
           // payload pra passar na regra Firestore que confere user_roles.sectorIds).
-          const sectorsSnap = await getDocs(collection(db, 'sectors'));
-          const sectorMap: Record<string, string> = {};
-          sectorsSnap.docs.forEach((d) => {
-            const data = d.data() as { name?: string; companyId?: string; companyIds?: string[] };
-            const belongs =
-              data.companyId === selectedCompanyId ||
-              (Array.isArray(data.companyIds) && data.companyIds.includes(selectedCompanyId)) ||
-              (data.companyId == null && !Array.isArray(data.companyIds));
-            if (belongs && typeof data.name === 'string') {
-              sectorMap[data.name] = d.id;
-            }
-          });
+          const sectorMap = await loadSectorIdByName(selectedCompanyId);
           setSectorIdByName(sectorMap);
 
           const empQuery = query(collection(db, 'employees'), where("companyId", "==", selectedCompanyId));
@@ -282,11 +272,12 @@ const EvaluationForm = ({ onSuccess }: { onSuccess: () => void }) => {
       if(!window.confirm("Alguns critérios estão sem nota (serão considerados 0). Deseja continuar?")) return;
     }
 
-    // Denormaliza sectorId no payload: prioriza o que vier no doc do employee,
-    // cai pro lookup name→id do tenant. Necessário pras regras Firestore
+    // Denormaliza sectorId no payload: prioriza o lookup name→id do setor
+    // exibido (é o que a UI usa pra filtrar o L3); o sectorId do employee pode
+    // estar defasado após troca de setor. Necessário pras regras Firestore
     // autorizarem L3 a gravar avaliações do próprio setor.
     const resolvedSectorId =
-      currentEmployee.sectorId ?? sectorIdByName[currentEmployee.sector] ?? null;
+      sectorIdByName[currentEmployee.sector] ?? currentEmployee.sectorId ?? null;
 
     setLoading(true);
     try {
